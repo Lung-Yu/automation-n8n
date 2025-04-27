@@ -238,17 +238,66 @@ app.post('/', (req, res) => {
     if (method === 'initialize') {
       const tools = [
         {
+          id: "text-sentiment-analyzer",
+          name: "Text Sentiment Analyzer",
+          description: "Analyzes the sentiment of text input",
+          actionName: "Analyze sentiment",
+          inputTypes: ["text"],
+          outputTypes: ["json"],
+          options: {
+            schema: {
+              type: "object",
+              properties: {}
+            }
+          }
+        },
+        {
+          id: "text-translator",
+          name: "Text Translator",
+          description: "Translates text to different languages",
+          actionName: "Translate text",
+          inputTypes: ["text"],
+          outputTypes: ["text"],
+          options: {
+            schema: {
+              type: "object",
+              properties: {
+                targetLanguage: {
+                  type: "string",
+                  enum: ["es", "fr", "de"],
+                  description: "Target language code"
+                }
+              },
+              required: ["targetLanguage"]
+            }
+          }
+        },
+        {
+          id: "image-analyzer",
+          name: "Image Analyzer",
+          description: "Analyzes and extracts information from images",
+          actionName: "Analyze image",
+          inputTypes: ["image"],
+          outputTypes: ["json"],
+          options: {
+            schema: {
+              type: "object",
+              properties: {}
+            }
+          }
+        },
+        {
           id: "echo-tool",
           name: "echo-tool",
           description: "Echoes the input text",
           actionName: "Echo",
           inputTypes: ["text"],
           outputTypes: ["text"],
-          options: { 
-            schema: { 
-              type: "object", 
-              properties: {} 
-            } 
+          options: {
+            schema: {
+              type: "object",
+              properties: {}
+            }
           }
         }
       ];
@@ -276,50 +325,64 @@ app.post('/', (req, res) => {
               imageProcessing: true,
               translation: true
             },
-            tools,      // Tools inside capabilities
-            mcpTools: tools // mcpTools inside capabilities
+            tools,
+            mcpTools: tools
           },
-          tools,      // Tools in root
-          mcpTools: tools // mcpTools in root
+          tools,
+          mcpTools: tools
         }
       });
     } else if (method === 'shutdown') {
-      // Handle shutdown request
       return res.json({
         jsonrpc: '2.0',
         id: id,
         result: null
       });
     } else if (method === 'exit') {
-      // Handle exit notification (no response needed)
       process.exit(0);
     } else if (method === 'notifications/initialized') {
-      // This is a notification, no response needed
       return res.status(204).send();
     } else if (method === 'tools/list') {
-      // Return the same tools list as in initialize
       const tools = [
+        {
+          id: "text-sentiment-analyzer",
+          name: "Text Sentiment Analyzer",
+          description: "Analyzes the sentiment of text input",
+          actionName: "Analyze sentiment",
+          inputTypes: ["text"],
+          outputTypes: ["json"]
+        },
+        {
+          id: "text-translator",
+          name: "Text Translator",
+          description: "Translates text to different languages",
+          actionName: "Translate text",
+          inputTypes: ["text"],
+          outputTypes: ["text"]
+        },
+        {
+          id: "image-analyzer",
+          name: "Image Analyzer",
+          description: "Analyzes and extracts information from images",
+          actionName: "Analyze image",
+          inputTypes: ["image"],
+          outputTypes: ["json"]
+        },
         {
           id: "echo-tool",
           name: "echo-tool",
           description: "Echoes the input text",
           actionName: "Echo",
           inputTypes: ["text"],
-          outputTypes: ["text"],
-          options: { 
-            schema: { 
-              type: "object", 
-              properties: {} 
-            } 
-          }
+          outputTypes: ["text"]
         }
       ];
       return res.json({
         jsonrpc: '2.0',
         id: id,
         result: {
-          tools,      // Tools in root
-          mcpTools: tools // mcpTools in root for new protocol
+          tools,
+          mcpTools: tools
         }
       });
     } else if (method === 'mcpTool/execute') {
@@ -327,24 +390,128 @@ app.post('/', (req, res) => {
       const input = req.body.params?.input;
       const options = req.body.params?.options;
 
-      if (toolId === 'echo-tool') {
-        return res.json({
-          jsonrpc: '2.0',
-          id: id,
-          result: {
-            output: input
+      // Handle different tools
+      switch (toolId) {
+        case 'echo-tool':
+          return res.json({
+            jsonrpc: '2.0',
+            id: id,
+            result: {
+              output: input
+            }
+          });
+
+        case 'text-sentiment-analyzer':
+          if (typeof input !== 'string') {
+            return res.json({
+              jsonrpc: '2.0',
+              id: id,
+              error: {
+                code: -32600,
+                message: 'Invalid input: expected string'
+              }
+            });
           }
-        });
+          return res.json({
+            jsonrpc: '2.0',
+            id: id,
+            result: {
+              output: {
+                sentiment: analyzeSentiment(input),
+                wordCount: countWords(input),
+                processedTimestamp: new Date().toISOString()
+              }
+            }
+          });
+
+        case 'text-translator':
+          if (typeof input !== 'string' || !options?.targetLanguage) {
+            return res.json({
+              jsonrpc: '2.0',
+              id: id,
+              error: {
+                code: -32600,
+                message: 'Invalid input: expected string and targetLanguage option'
+              }
+            });
+          }
+          return res.json({
+            jsonrpc: '2.0',
+            id: id,
+            result: {
+              output: mockTranslate(input, options.targetLanguage)
+            }
+          });
+
+        case 'image-analyzer':
+          if (!input || !input.startsWith('data:image/')) {
+            return res.json({
+              jsonrpc: '2.0',
+              id: id,
+              error: {
+                code: -32600,
+                message: 'Invalid input: expected base64 image data'
+              }
+            });
+          }
+
+          // Extract base64 data and convert to buffer
+          const base64Data = input.split(',')[1];
+          const imageBuffer = Buffer.from(base64Data, 'base64');
+          
+          // Save to temporary file
+          const tempFilePath = path.join(uploadsDir, `temp-${Date.now()}.png`);
+          fs.writeFileSync(tempFilePath, imageBuffer);
+
+          // Process image
+          const result = {
+            fileName: path.basename(tempFilePath),
+            fileSize: imageBuffer.length,
+            mimeType: input.split(';')[0].split(':')[1],
+            dimensions: { width: 800, height: 600 }, // Simulated dimensions
+            colors: ['#FF5733', '#33FF57', '#3357FF'], // Simulated color extraction
+            processedTimestamp: new Date().toISOString()
+          };
+
+          // Clean up temp file
+          fs.unlinkSync(tempFilePath);
+
+          return res.json({
+            jsonrpc: '2.0',
+            id: id,
+            result: {
+              output: result
+            }
+          });
+
+        default:
+          return res.json({
+            jsonrpc: '2.0',
+            id: id,
+            error: {
+              code: -32601,
+              message: `Tool ${toolId} not found`
+            }
+          });
       }
     }
+
+    return res.status(400).json({
+      jsonrpc: '2.0',
+      id: req.body.id,
+      error: {
+        code: -32601,
+        message: 'Method not found'
+      }
+    });
   }
 
-  res.status(400).json({
+  return res.status(400).json({
     jsonrpc: '2.0',
     id: req.body.id,
     error: {
-      code: -32601,
-      message: 'Method not found'
+      code: -32600,
+      message: 'Invalid request'
     }
   });
 });
