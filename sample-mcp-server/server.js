@@ -212,11 +212,8 @@ app.get('/', (req, res) => {
     }
   };
   
-  // Send tools notification after a short delay to ensure the connection is established
-  setTimeout(() => {
-    console.log("Sending mcpTool/register notification");
-    res.write(`data: ${JSON.stringify(toolsNotification)}\n\n`);
-  }, 1000);
+  // We don't need to send tools notification via SSE anymore
+  // Tools are registered via the initialize response
   
   // Clean up when the connection is closed
   req.on('close', () => {
@@ -235,9 +232,27 @@ app.post('/', (req, res) => {
   if (req.body.jsonrpc === '2.0') {
     const id = req.body.id;
     const method = req.body.method;
+    console.log('Received method:', method);
+    console.log('Request params:', req.body.params);
     
     if (method === 'initialize') {
-      // Respond with correct JSON-RPC format for initialization
+      const tools = [
+        {
+          id: "echo-tool",
+          name: "echo-tool",
+          description: "Echoes the input text",
+          actionName: "Echo",
+          inputTypes: ["text"],
+          outputTypes: ["text"],
+          options: { 
+            schema: { 
+              type: "object", 
+              properties: {} 
+            } 
+          }
+        }
+      ];
+
       return res.json({
         jsonrpc: '2.0',
         id: id,
@@ -246,8 +261,8 @@ app.post('/', (req, res) => {
             name: "Sample MCP Server",
             version: "1.0.0"
           },
+          protocolVersion: "2025-03-26",
           capabilities: {
-            // Standard capabilities
             textDocument: {
               analyze: true,
               translate: true,
@@ -256,154 +271,80 @@ app.post('/', (req, res) => {
             binaryData: {
               process: true
             },
-            // Custom capabilities
             customCapabilities: {
               textAnalysis: true,
               imageProcessing: true,
               translation: true
-            }
+            },
+            tools,      // Tools inside capabilities
+            mcpTools: tools // mcpTools inside capabilities
           },
-          // Register MCP tools
-          tools: [
-            {
-              id: "text-sentiment-analyzer",
-              name: "Text Sentiment Analyzer",
-              description: "Analyzes the sentiment of text input",
-              actionName: "Analyze sentiment",
-              inputTypes: ["text"],
-              outputTypes: ["json"],
-              options: {
-                schema: {
-                  type: "object",
-                  properties: {}
-                }
-              }
-            },
-            {
-              id: "text-translator",
-              name: "Text Translator",
-              description: "Translates text to different languages",
-              actionName: "Translate text",
-              inputTypes: ["text"],
-              outputTypes: ["text"],
-              options: {
-                schema: {
-                  type: "object",
-                  properties: {
-                    targetLanguage: {
-                      type: "string",
-                      enum: ["es", "fr", "de"],
-                      description: "Target language code"
-                    }
-                  },
-                  required: ["targetLanguage"]
-                }
-              }
-            },
-            {
-              id: "image-analyzer",
-              name: "Image Analyzer",
-              description: "Analyzes and extracts information from images",
-              actionName: "Analyze image",
-              inputTypes: ["image", "file"],
-              outputTypes: ["json"],
-              options: {
-                schema: {
-                  type: "object",
-                  properties: {}
-                }
-              }
-            }
-          ]
+          tools,      // Tools in root
+          mcpTools: tools // mcpTools in root
         }
       });
-    } else if (method === 'mcpTool/execute') {
-      // Handle tool execution
-      const toolId = req.body.params.toolId;
-      const input = req.body.params.input;
-      const options = req.body.params.options || {};
-      
-      console.log(`Executing tool: ${toolId}`);
-      console.log(`Input:`, input);
-      console.log(`Options:`, options);
-      
-      // Execute the appropriate tool based on toolId
-      let result;
-      
-      if (toolId === 'text-sentiment-analyzer') {
-        result = {
-          sentiment: analyzeSentiment(input),
-          wordCount: countWords(input),
-          processedTimestamp: new Date().toISOString()
-        };
-      } else if (toolId === 'text-translator') {
-        result = {
-          originalText: input,
-          translatedText: mockTranslate(input, options.targetLanguage || 'es'),
-          targetLanguage: options.targetLanguage || 'es',
-          processedTimestamp: new Date().toISOString()
-        };
-      } else if (toolId === 'image-analyzer') {
-        // For image analysis, we'd typically process binary data
-        // This is a placeholder for demonstration
-        result = {
-          message: "Image analysis placeholder - actual image processing would happen here",
-          imageInfo: {
-            type: "sample-image",
-            dimensions: { width: 800, height: 600 },
-            colors: ['#FF5733', '#33FF57', '#3357FF'],
-          },
-          processedTimestamp: new Date().toISOString()
-        };
-      } else {
-        return res.json({
-          jsonrpc: '2.0',
-          id: id,
-          error: {
-            code: -32601,
-            message: `Tool '${toolId}' not found`
-          }
-        });
-      }
-      
+    } else if (method === 'shutdown') {
+      // Handle shutdown request
       return res.json({
         jsonrpc: '2.0',
         id: id,
-        result: result
+        result: null
       });
-    } else {
-      // Handle other methods
+    } else if (method === 'exit') {
+      // Handle exit notification (no response needed)
+      process.exit(0);
+    } else if (method === 'notifications/initialized') {
+      // This is a notification, no response needed
+      return res.status(204).send();
+    } else if (method === 'tools/list') {
+      // Return the same tools list as in initialize
+      const tools = [
+        {
+          id: "echo-tool",
+          name: "echo-tool",
+          description: "Echoes the input text",
+          actionName: "Echo",
+          inputTypes: ["text"],
+          outputTypes: ["text"],
+          options: { 
+            schema: { 
+              type: "object", 
+              properties: {} 
+            } 
+          }
+        }
+      ];
       return res.json({
         jsonrpc: '2.0',
         id: id,
         result: {
-          status: 'success',
-          message: `Method '${method}' executed`
+          tools,      // Tools in root
+          mcpTools: tools // mcpTools in root for new protocol
         }
       });
+    } else if (method === 'mcpTool/execute') {
+      const toolId = req.body.params?.toolId;
+      const input = req.body.params?.input;
+      const options = req.body.params?.options;
+
+      if (toolId === 'echo-tool') {
+        return res.json({
+          jsonrpc: '2.0',
+          id: id,
+          result: {
+            output: input
+          }
+        });
+      }
     }
   }
-  
-  // Fallback for non-JSON-RPC requests
-  res.json({
-    serverInfo: {
-      name: "Sample MCP Server",
-      version: "1.0.0"
-    },
-    capabilities: {
-      textDocument: {
-        analyze: true,
-        translate: true,
-        process: true
-      },
-      binaryData: {
-        process: true
-      },
-      customCapabilities: {
-        textAnalysis: true,
-        imageProcessing: true,
-        translation: true
-      }
+
+  res.status(400).json({
+    jsonrpc: '2.0',
+    id: req.body.id,
+    error: {
+      code: -32601,
+      message: 'Method not found'
     }
   });
 });
