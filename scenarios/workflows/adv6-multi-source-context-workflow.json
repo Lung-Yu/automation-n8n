@@ -126,7 +126,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=YOUR_GEMINI_API_KEY",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=YOUR_GEMINI_API_KEY",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ { contents: [ { parts: [ { text: '你是資深 IT 維運工程師，做跨資料源的綜合判斷。\\n\\n問題：' + $json.question + '\\n\\n以下是三個資料源的完整資訊：\\n' + $json.context + '\\n\\n請綜合三個來源做判斷（單看一個來源可能誤判：即時值高可能是偶發，要看歷史告警是否反覆、趨勢是否持續惡化）。\\n\\n請只回傳 JSON（不要 markdown 包裹）：\\n{\\n  \"assessment\": \"綜合評估（引用具體數字與趨勢）\",\\n  \"matched_runbook\": \"適用的處理程序（若有）\",\\n  \"recommendation\": \"具體建議動作\",\\n  \"risk_level\": \"high|medium|low\"\\n}' } ] } ], generationConfig: { temperature: 0.1 } } }}",

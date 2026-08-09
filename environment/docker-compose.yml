@@ -8,7 +8,8 @@ version: "3.8"
 
 services:
   n8n:
-    image: n8nio/n8n:latest
+    # 課程所有測試紀錄與 n8n 2.21.7 限制文件都是針對這個版本驗證的，不要用 latest
+    image: n8nio/n8n:2.21.7
     container_name: n8n-student
     restart: unless-stopped
     ports:
@@ -30,6 +31,11 @@ services:
       - n8n_data:/home/node/.n8n
     networks:
       - lab-network
+    extra_hosts:
+      # workflow JSON 全部寫死呼叫 host.containers.internal（Podman 慣例）；
+      # Docker（含 Docker Desktop）本身不解析這個名稱，用 extra_hosts 補上，
+      # 兩種 runtime 都能跑，不用改任何 workflow JSON
+      - "host.containers.internal:host-gateway"
 
   # Qdrant 向量資料庫（Day 2 RAG Demo 使用）
   qdrant:
@@ -43,16 +49,18 @@ services:
     networks:
       - lab-network
 
-  # Mock API Server（Day 1 模擬設備狀態 API）
+  # Mock API Server（設備狀態/告警/工單/事件，workflow 全部寫死呼叫 3001）
   mock-api:
     image: node:20-alpine
     container_name: mock-api-lab
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3001:3001"
     volumes:
       - ./mock-api:/app
     working_dir: /app
+    environment:
+      - PORT=3001
     command: node server.js
     networks:
       - lab-network

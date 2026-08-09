@@ -63,7 +63,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=YOUR_GEMINI_API_KEY",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=YOUR_GEMINI_API_KEY",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ { contents: [ { parts: [ { text: '你是 TSMC IT 維運部門的值班助理，負責撰寫每日維運日報。\\n\\n以下是過去 24 小時的告警統計（JSON）：\\n' + JSON.stringify($json.stats) + '\\n\\n請用繁體中文撰寫一份 markdown 格式的維運摘要日報，包含：\\n1. 總覽（一段話，含告警總數與 critical 數量）\\n2. 需要關注（列出反覆觸發或 critical 的項目，給處理建議）\\n3. 低風險項目（一句話帶過）\\n\\n直接輸出 markdown，不要 ``` 包裹。' } ] } ], generationConfig: { temperature: 0.1 } } }}",

@@ -48,7 +48,7 @@
       "typeVersion": 1,
       "position": [440, 520],
       "parameters": {
-        "modelName": "models/gemini-2.0-flash",
+        "modelName": "models/gemini-2.5-flash",
         "options": {}
       },
       "credentials": {

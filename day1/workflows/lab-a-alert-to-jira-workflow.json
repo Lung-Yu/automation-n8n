@@ -81,7 +81,7 @@
         "operation": "message",
         "modelId": {
           "__rl": true,
-          "value": "models/gemini-2.0-flash",
+          "value": "models/gemini-2.5-flash",
           "mode": "list"
         },
         "messages": {
@@ -111,7 +111,7 @@
         300
       ],
       "parameters": {
-        "jsCode": "const text = $input.item.json.candidates?.[0]?.content?.parts?.[0]?.text || '{}';\nconst clean = text.replace(/```json\\n?|```/g, '').trim();\nlet parsed = {};\ntry { parsed = JSON.parse(clean); } catch(e) { parsed = {summary: 'Parse error', description: text, priority: 'Medium'}; }\nconst prev = $('Parse Alert Fields').item.json;\nreturn [{ json: {\n  jira_summary:     parsed.summary     || 'Alert: ' + prev.alert_name,\n  jira_description: parsed.description || prev.raw_message,\n  jira_priority:    parsed.priority    || 'High',\n  alert_name: prev.alert_name,\n  service:    prev.service,\n  severity:   prev.severity,\n  host:       prev.host\n} }];"
+        "jsCode": "const text = $input.item.json.content?.parts?.[0]?.text || $input.item.json.candidates?.[0]?.content?.parts?.[0]?.text || '{}';\nconst clean = text.replace(/```json\\n?|```/g, '').trim();\nlet parsed = {};\ntry { parsed = JSON.parse(clean); } catch(e) { parsed = {summary: 'Parse error', description: text, priority: 'Medium'}; }\nconst prev = $('Parse Alert Fields').item.json;\nreturn [{ json: {\n  jira_summary:     parsed.summary     || 'Alert: ' + prev.alert_name,\n  jira_description: parsed.description || prev.raw_message,\n  jira_priority:    parsed.priority    || 'High',\n  alert_name: prev.alert_name,\n  service:    prev.service,\n  severity:   prev.severity,\n  host:       prev.host\n} }];"
       }
     },
     {

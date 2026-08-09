@@ -29,7 +29,7 @@
       ],
       "parameters": {
         "color": 3,
-        "content": "## Demo 3 — Gemini 基礎整合\n\n**目的**：展示用 n8n 原生 Google Gemini Node 呼叫 Gemini，不需要手寫 HTTP Request\n\n**核心 Node**：Google Gemini（Text → Message a model）\n\n**輸出**：`$json.output` 就是 AI 回答的文字，不需要手動 parse candidates\n\n**Demo 重點**\n1. 點選 Google Gemini node 看 credential 已自動帶入\n2. Model 選 gemini-2.0-flash（最快最省）\n3. Execute workflow → 看 output 欄位"
+        "content": "## Demo 3 — Gemini 基礎整合\n\n**目的**：展示用 n8n 原生 Google Gemini Node 呼叫 Gemini，不需要手寫 HTTP Request\n\n**核心 Node**：Google Gemini（Text → Message a model）\n\n**輸出**：`$json.output` 就是 AI 回答的文字，不需要手動 parse candidates\n\n**Demo 重點**\n1. 點選 Google Gemini node 看 credential 已自動帶入\n2. Model 選 gemini-2.5-flash（最快最省）\n3. Execute workflow → 看 output 欄位"
       }
     },
     {
@@ -69,7 +69,7 @@
         "operation": "message",
         "modelId": {
           "__rl": true,
-          "value": "models/gemini-2.0-flash",
+          "value": "models/gemini-2.5-flash",
           "mode": "list"
         },
         "messages": {

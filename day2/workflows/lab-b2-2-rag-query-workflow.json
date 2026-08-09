@@ -40,10 +40,9 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://host.containers.internal:3003/v1beta/models/text-embedding-004:embedContent?key=TEST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=YOUR_GEMINI_API_KEY",
         "sendBody": true,
-        "specifyBody": "string",
-        "body": "={{ JSON.stringify({ content: { parts: [{ text: $json.question }] }, taskType: 'RETRIEVAL_QUERY' }) }}",
+        "specifyBody": "json",
         "options": {
           "headers": {
             "parameters": [
@@ -53,7 +52,8 @@
               }
             ]
           }
-        }
+        },
+        "jsonBody": "={{ { content: { parts: [{ text: $json.question }] }, taskType: 'RETRIEVAL_QUERY', outputDimensionality: 768 } }}"
       },
       "id": "node-embed",
       "name": "Get Question Embedding",
@@ -162,48 +162,8 @@
       ]
     },
     {
-      "id": "f442f3cd-2936-475a-be3e-476926415392",
-      "name": "Basic LLM Chain：Gemini 生成答案",
-      "type": "@n8n/n8n-nodes-langchain.lmChain",
-      "typeVersion": 1.4,
-      "position": [
-        2440,
-        300
-      ],
       "parameters": {
-        "prompt": {
-          "values": {
-            "promptType": "define",
-            "text": "={{ $json.full_prompt }}"
-          }
-        }
-      }
-    },
-    {
-      "id": "d71dfeaf-5b53-4f67-8628-5349a8379a64",
-      "name": "Gemini Chat Model",
-      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
-      "typeVersion": 1,
-      "position": [
-        2440,
-        480
-      ],
-      "parameters": {
-        "modelName": "models/gemini-2.0-flash",
-        "options": {
-          "temperature": 0.1
-        }
-      },
-      "credentials": {
-        "googlePalmApi": {
-          "id": "G7B3Jkm3AiKjF1gY",
-          "name": "Google Gemini(PaLM) Api account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "const prevData = $('Build Prompt').item.json;\nlet answer;\n\ntry {\n  answer = $input.item.json.output;\n} catch(e) {\n  // Fallback when no real API key\n  answer = '[Gemini API Key not set]\\n\\nSearch results (RAG retrieval completed):\\n' +\n    prevData.top3.map((c, i) => (i+1) + '. ' + c.source + ' > ' + c.section + '\\n   ' + c.text.substring(0,150) + '...').join('\\n\\n');\n}\n\nreturn [{ json: {\n  question: prevData.question,\n  answer,\n  sources: prevData.top3.map(c => ({\n    source: c.source,\n    section: c.section,\n    rrf_score: c.rrf_score.toFixed(5),\n    dense_rank: c.dense_rank || null,\n    bm25_rank: c.bm25_rank || null\n  })),\n  retrieval_strategy: 'Dense (Qdrant Cosine) + BM25 (k1=1.2, b=0.75) -> RRF (k=60)'\n} }];"
+        "jsCode": "const prevData = $('Build Prompt').item.json;\nlet answer;\n\ntry {\n  answer = $input.item.json.candidates[0].content.parts[0].text;\n} catch(e) {\n  // Fallback when no real API key\n  answer = '[Gemini API Key not set]\\n\\nSearch results (RAG retrieval completed):\\n' +\n    prevData.top3.map((c, i) => (i+1) + '. ' + c.source + ' > ' + c.section + '\\n   ' + c.text.substring(0,150) + '...').join('\\n\\n');\n}\n\nreturn [{ json: {\n  question: prevData.question,\n  answer,\n  sources: prevData.top3.map(c => ({\n    source: c.source,\n    section: c.section,\n    rrf_score: c.rrf_score.toFixed(5),\n    dense_rank: c.dense_rank || null,\n    bm25_rank: c.bm25_rank || null\n  })),\n  retrieval_strategy: 'Dense (Qdrant Cosine) + BM25 (k1=1.2, b=0.75) -> RRF (k=60)'\n} }];"
       },
       "id": "node-format",
       "name": "Format Response",
@@ -250,6 +210,24 @@
       "parameters": {
         "mode": "combine",
         "combineBy": "combineByPosition",
+        "options": {}
+      }
+    },
+    {
+      "id": "node-gemini-http",
+      "name": "Gemini Generate (HTTP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2440,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=YOUR_GEMINI_API_KEY",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.parse($json.gemini_payload) }}",
         "options": {}
       }
     }
@@ -319,7 +297,7 @@
       "main": [
         [
           {
-            "node": "Basic LLM Chain：Gemini 生成答案",
+            "node": "Gemini Generate (HTTP)",
             "type": "main",
             "index": 0
           }
@@ -392,23 +370,12 @@
         ]
       ]
     },
-    "Basic LLM Chain：Gemini 生成答案": {
+    "Gemini Generate (HTTP)": {
       "main": [
         [
           {
             "node": "Format Response",
             "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Gemini Chat Model": {
-      "ai_languageModel": [
-        [
-          {
-            "node": "Basic LLM Chain：Gemini 生成答案",
-            "type": "ai_languageModel",
             "index": 0
           }
         ]

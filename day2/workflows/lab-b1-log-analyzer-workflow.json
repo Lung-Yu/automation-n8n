@@ -38,7 +38,7 @@
         "operation": "message",
         "modelId": {
           "__rl": true,
-          "value": "models/gemini-2.0-flash",
+          "value": "models/gemini-2.5-flash",
           "mode": "list"
         },
         "messages": {
@@ -60,7 +60,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const text = $input.item.json.candidates?.[0]?.content?.parts?.[0]?.text || '{}';\nconst clean = text.replace(/```json\\n?|```/g, '').trim();\nlet parsed = {};\ntry { parsed = JSON.parse(clean); } catch(e) { parsed = {severity:'Medium', root_cause:'Parse error', actions: text}; }\nconst logText = $input.item.json.log_text || '';\nreturn [{ json: {\n  severity:    parsed.severity   || 'Medium',\n  root_cause:  parsed.root_cause || '',\n  actions:     parsed.actions    || '',\n  original_log: logText\n} }];"
+        "jsCode": "const text = $input.item.json.content?.parts?.[0]?.text || $input.item.json.candidates?.[0]?.content?.parts?.[0]?.text || '{}';\nconst clean = text.replace(/```json\\n?|```/g, '').trim();\nlet parsed = {};\ntry { parsed = JSON.parse(clean); } catch(e) { parsed = {severity:'Medium', root_cause:'Parse error', actions: text}; }\nconst logText = $input.item.json.log_text || '';\nreturn [{ json: {\n  severity:    parsed.severity   || 'Medium',\n  root_cause:  parsed.root_cause || '',\n  actions:     parsed.actions    || '',\n  original_log: logText\n} }];"
       },
       "id": "lb1-parse",
       "name": "Parse AI Response",

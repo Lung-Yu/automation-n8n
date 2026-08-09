@@ -121,10 +121,9 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "http://host.containers.internal:3003/v1beta/models/gemini-2.0-flash:generateContent?key=TEST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=YOUR_GEMINI_API_KEY",
         "sendBody": true,
-        "specifyBody": "string",
-        "body": "={{ JSON.stringify({ contents: [{ parts: [{ text: \"Summarize this action in one sentence: \" + $json.action + \" - \" + $json.message }] }] }) }}",
+        "specifyBody": "json",
         "options": {
           "headers": {
             "parameters": [
@@ -134,7 +133,8 @@
               }
             ]
           }
-        }
+        },
+        "jsonBody": "={{ { contents: [{ parts: [{ text: \"Summarize this action in one sentence: \" + $json.action + \" - \" + $json.message }] }] } }}"
       }
     },
     {

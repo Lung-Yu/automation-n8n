@@ -79,7 +79,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=YOUR_GEMINI_API_KEY",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=YOUR_GEMINI_API_KEY",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ { contents: [ { parts: [ { text: '你是 IT 維運部門的事件管理專員，負責撰寫 Post-Incident Report（PIR，事後報告）。\\n\\n以下是事件系統匯出的完整資料：\\n---\\n' + $json.context + '\\n---\\n\\n請根據以上資料撰寫繁體中文的 PIR，markdown 格式，包含以下章節：\\n## 摘要（3 行內：發生什麼、影響多大、怎麼解決的）\\n## 時間軸（保留原始時間，濃縮成關鍵節點）\\n## 根本原因\\n## 影響範圍\\n## 改善建議（區分已完成與待辦）\\n\\n嚴格規則：只使用資料中存在的事實，不要推測或發明細節。資料中沒有的資訊寫「資料未記錄」。直接輸出 markdown，不要 ``` 包裹。' } ] } ], generationConfig: { temperature: 0.1 } } }}",

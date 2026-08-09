@@ -42,10 +42,9 @@
       ],
       "parameters": {
         "method": "POST",
-        "url": "http://host.containers.internal:3003/v1beta/models/text-embedding-004:embedContent?key=TEST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=YOUR_GEMINI_API_KEY",
         "sendBody": true,
-        "specifyBody": "string",
-        "body": "={{ JSON.stringify({ content: { parts: [{ text: $json.question }] }, taskType: \"RETRIEVAL_QUERY\" }) }}",
+        "specifyBody": "json",
         "options": {
           "headers": {
             "parameters": [
@@ -55,7 +54,8 @@
               }
             ]
           }
-        }
+        },
+        "jsonBody": "={{ { content: { parts: [{ text: $json.question }] }, taskType: \"RETRIEVAL_QUERY\", outputDimensionality: 768 } }}"
       }
     },
     {

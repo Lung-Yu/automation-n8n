@@ -58,7 +58,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=YOUR_GEMINI_API_KEY",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=YOUR_GEMINI_API_KEY",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ { contents: [ { parts: [ { text: '你是 IT 維運分析助理。分析以下告警：\\n\\nalertname: ' + $json.alertname + '\\nhost: ' + $json.host + '\\nseverity: ' + $json.severity + '\\nmessage: ' + $json.message + '\\n\\n請只回傳 JSON（不要 markdown 包裹）：\\n{\\n  \"severity_assessment\": \"Critical|High|Medium|Low\",\\n  \"root_cause\": \"可能原因（一行）\",\\n  \"suggested_action\": \"建議動作（一行）\",\\n  \"confidence\": 0到100的整數\\n}\\n\\nconfidence 的意義：你對這個分析有多少把握。\\n- 告警類型你熟悉、資訊完整 → 高（80+）\\n- 告警類型陌生、資訊不足、需要更多上下文 → 低（50 以下）\\n誠實評估，不確定就給低分。' } ] } ], generationConfig: { temperature: 0.1 } } }}",

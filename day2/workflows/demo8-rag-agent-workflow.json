@@ -65,7 +65,7 @@
         "name": "search_knowledge_base",
         "description": "搜尋 IT 維運知識庫（Network Runbook + IT SOP），輸入使用者的問題，自動向量化後查 Qdrant，返回最相關段落",
         "language": "javaScript",
-        "code": "const query = $fromAI('query', '要搜尋的問題');\nconst embedResp = await $http.request({\n  method: 'POST',\n  url: 'http://host.containers.internal:3003/v1beta/models/text-embedding-004:embedContent?key=TEST',\n  headers: {'Content-Type': 'application/json'},\n  body: JSON.stringify({ content: { parts: [{ text: query }] }, taskType: 'RETRIEVAL_QUERY' })\n});\nconst vector = JSON.parse(embedResp.body).embedding.values;\nconst searchResp = await $http.request({\n  method: 'POST',\n  url: 'http://host.containers.internal:6333/collections/sop_knowledge/points/search',\n  headers: {'Content-Type': 'application/json'},\n  body: JSON.stringify({ vector, limit: 5, with_payload: true })\n});\nconst hits = JSON.parse(searchResp.body).result || [];\nif (!hits.length) return '（知識庫無相關資料）';\nreturn hits.map((h,i) => '[' + (i+1) + '] ' + h.payload.source + ' > ' + h.payload.section + '\n' + h.payload.text).join('\n\n---\n\n');"
+        "code": "const query = $fromAI('query', '要搜尋的問題');\nconst embedResp = await $http.request({\n  method: 'POST',\n  url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=YOUR_GEMINI_API_KEY',\n  headers: {'Content-Type': 'application/json'},\n  body: JSON.stringify({ content: { parts: [{ text: query }] }, taskType: 'RETRIEVAL_QUERY', outputDimensionality: 768 })\n});\nconst vector = JSON.parse(embedResp.body).embedding.values;\nconst searchResp = await $http.request({\n  method: 'POST',\n  url: 'http://host.containers.internal:6333/collections/sop_knowledge/points/search',\n  headers: {'Content-Type': 'application/json'},\n  body: JSON.stringify({ vector, limit: 5, with_payload: true })\n});\nconst hits = JSON.parse(searchResp.body).result || [];\nif (!hits.length) return '（知識庫無相關資料）';\nreturn hits.map((h,i) => '[' + (i+1) + '] ' + h.payload.source + ' > ' + h.payload.section + '\n' + h.payload.text).join('\n\n---\n\n');"
       }
     },
     {
@@ -78,7 +78,7 @@
         520
       ],
       "parameters": {
-        "modelName": "models/gemini-2.0-flash",
+        "modelName": "models/gemini-2.5-flash",
         "options": {}
       },
       "credentials": {
