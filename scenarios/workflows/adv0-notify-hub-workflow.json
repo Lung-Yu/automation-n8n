@@ -1,0 +1,221 @@
+{
+  "name": "Adv 0 - 通知中心 [共用 Sub-Workflow：severity 分流 → Discord / Email]",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Adv 0：通知中心（Notify Hub）\n\n**所有情境共用的通知出口** — Adv 1-6 的關鍵事件都打到這裡，\n由這一個 workflow 統一決定怎麼通知、通知誰。\n\n**呼叫方式**（任何 workflow 加一個 HTTP Request 節點）：\n```\nPOST http://localhost:5678/webhook/notify-hub\n{ \"source\": \"adv1-dedup\", \"severity\": \"critical\",\n  \"title\": \"新 Critical 事件\", \"message\": \"...\" }\n```\n\n**分流規則**：\n- critical → Discord @here 緊急通知（+ Email，需 SMTP 設定後啟用）\n- 其他 → Discord 一般訊息\n\n**集中的好處**：換通知管道（Teams/LINE/簡訊）只改這裡，\n六個情境 workflow 一行都不用動。",
+        "height": 400,
+        "width": 480
+      },
+      "id": "adv0-note",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-64, -208]
+    },
+    {
+      "parameters": {
+        "content": "### Discord Webhook 設定\n\n1. Discord 伺服器 → 頻道設定 → 整合 → Webhook → 新增\n2. 複製 Webhook URL，替換本 workflow 兩個 HTTP 節點的 URL\n\n### Email（選用）\n\n「Email: 緊急信件」節點預設 disabled。\n啟用步驟：Settings → Credentials → 新增 SMTP\n（Gmail 需用應用程式密碼），然後 enable 該節點。",
+        "height": 260,
+        "width": 380
+      },
+      "id": "adv0-note2",
+      "name": "Sticky Note 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1104, -160]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "notify-hub",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "adv0-wh",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-16, 304],
+      "webhookId": "adv0-notify-hub-hook"
+    },
+    {
+      "parameters": {},
+      "id": "adv0-manual",
+      "name": "Demo Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-16, 512]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Demo 用通知：改 severity 為 'info' 可測一般訊息路徑\nreturn [{ json: {\n  source: 'demo',\n  severity: 'critical',\n  title: '通知中心測試',\n  message: '這是一則來自 Demo Trigger 的測試通知'\n} }];"
+      },
+      "id": "adv0-demo",
+      "name": "Demo 通知",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [176, 512]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 支援 Webhook（$json.body）與 Demo 路徑；欄位缺漏給安全預設\nconst b = $json.body?.title ? $json.body : $json;\nreturn [{ json: {\n  source: b.source || 'unknown',\n  severity: (b.severity || 'info').toLowerCase(),\n  title: b.title || '(無標題)',\n  message: b.message || ''\n} }];"
+      },
+      "id": "adv0-norm",
+      "name": "整理通知",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 304]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "sev1",
+              "leftValue": "={{ $json.severity }}",
+              "rightValue": "critical",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "adv0-if",
+      "name": "IF: critical？",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [624, 304]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { content: '🚨 @here **[' + $json.source + '] ' + $json.title + '**\\n' + $json.message } }}",
+        "options": {}
+      },
+      "id": "adv0-discord-crit",
+      "name": "Discord: 緊急通知",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [848, 160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { content: 'ℹ️ **[' + $json.source + '] ' + $json.title + '**\\n' + $json.message } }}",
+        "options": {}
+      },
+      "id": "adv0-discord-info",
+      "name": "Discord: 一般訊息",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [848, 448]
+    },
+    {
+      "parameters": {
+        "fromEmail": "n8n-ops@example.com",
+        "toEmail": "oncall-team@example.com",
+        "subject": "=[緊急] {{ $('整理通知').item.json.title }}",
+        "text": "={{ $('整理通知').item.json.message }}",
+        "options": {}
+      },
+      "id": "adv0-email",
+      "name": "Email: 緊急信件",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1104, 160],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const n = $('整理通知').item.json;\nreturn [{ json: {\n  notified: true,\n  channel: 'discord',\n  urgency: n.severity === 'critical' ? 'urgent' : 'normal',\n  source: n.source,\n  title: n.title\n} }];"
+      },
+      "id": "adv0-result",
+      "name": "回報結果",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1104, 448]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          { "node": "整理通知", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Demo Trigger": {
+      "main": [
+        [
+          { "node": "Demo 通知", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Demo 通知": {
+      "main": [
+        [
+          { "node": "整理通知", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "整理通知": {
+      "main": [
+        [
+          { "node": "IF: critical？", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "IF: critical？": {
+      "main": [
+        [
+          { "node": "Discord: 緊急通知", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Discord: 一般訊息", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Discord: 緊急通知": {
+      "main": [
+        [
+          { "node": "Email: 緊急信件", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Email: 緊急信件": {
+      "main": [
+        [
+          { "node": "回報結果", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Discord: 一般訊息": {
+      "main": [
+        [
+          { "node": "回報結果", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveManualExecutions": true,
+    "executionOrder": "v1"
+  }
+}

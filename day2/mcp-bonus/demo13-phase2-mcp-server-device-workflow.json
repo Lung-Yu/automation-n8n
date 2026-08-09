@@ -1,0 +1,88 @@
+{
+  "name": "Demo 13 Phase2 - MCP Server：查設備狀態工具",
+  "nodes": [
+    {
+      "id": "b2c3d4e5-0001-4000-8000-000000000001",
+      "name": "說明",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [60, 160],
+      "parameters": {
+        "color": 7,
+        "content": "## Demo 13 Phase 2 — MCP Server（查設備狀態）\n\n**用途**：把「查設備狀態」包成 MCP 標準工具，任何支援 MCP 的 AI 都能呼叫\n\n**重要**：此 workflow 需要「**啟用**」（Active = ON）才能被 MCP Client 呼叫\n\n**MCP Server URL**（啟用後在 trigger 節點取得）：\n`http://host.containers.internal:5678/mcp/YOUR-WORKFLOW-ID/...`\n\n**工具名稱**：`check_device_status`\n**參數**：`device_id`（設備名稱，string）\n**回傳**：設備 CPU / Memory / Network 狀態\n\n**對比 Phase 1**：Phase 1 的 Tool A 是 HTTP Request，只有那個 workflow 能用。\nMCP Server 之後，任何 AI（不限 n8n）都能呼叫同一個工具定義。"
+      }
+    },
+    {
+      "id": "b2c3d4e5-0002-4000-8000-000000000002",
+      "name": "MCP Server Trigger",
+      "type": "@n8n/n8n-nodes-langchain.mcpTrigger",
+      "typeVersion": 1,
+      "position": [280, 320],
+      "parameters": {
+        "toolName": "check_device_status",
+        "description": "查詢指定設備的即時狀態，包含 CPU 使用率、Memory 使用率、Network 狀態。CPU > 90% 或 status=critical 表示設備異常。",
+        "inputSchema": {
+          "properties": [
+            {
+              "name": "device_id",
+              "type": "string",
+              "description": "設備名稱，例如 prod-node-03、prod-db-01、prod-web-02"
+            }
+          ],
+          "required": ["device_id"]
+        }
+      },
+      "webhookId": "demo13-mcp-server-device-001"
+    },
+    {
+      "id": "b2c3d4e5-0003-4000-8000-000000000003",
+      "name": "HTTP Request：查設備狀態",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 320],
+      "parameters": {
+        "method": "GET",
+        "url": "=http://host.containers.internal:3001/api/devices/{{ $json.device_id }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "b2c3d4e5-0004-4000-8000-000000000004",
+      "name": "Code：格式化回傳",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [760, 320],
+      "parameters": {
+        "jsCode": "const device = $input.first().json;\nconst status = device.status || 'unknown';\nconst cpu = device.cpu_percent ?? 'N/A';\nconst memory = device.memory_percent ?? 'N/A';\nconst isAbnormal = cpu > 90 || status === 'critical';\n\nreturn [{ json: {\n  device_id: device.device_id,\n  cpu_percent: cpu,\n  memory_percent: memory,\n  network_status: device.network_status || 'N/A',\n  status: status,\n  is_abnormal: isAbnormal,\n  summary: `設備 ${device.device_id}：CPU ${cpu}%，Memory ${memory}%，狀態 ${status}${isAbnormal ? ' ⚠️ 異常' : ' ✅ 正常'}`\n} }];"
+      }
+    }
+  ],
+  "connections": {
+    "MCP Server Trigger": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request：查設備狀態",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request：查設備狀態": {
+      "main": [
+        [
+          {
+            "node": "Code：格式化回傳",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

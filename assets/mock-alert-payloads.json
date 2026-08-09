@@ -1,0 +1,67 @@
+[
+  {
+    "_scenario": "Critical - High CPU (Lab A 主要示範)",
+    "alertname": "HighCPUUsage",
+    "service": "api-gateway",
+    "severity": "critical",
+    "message": "CPU usage exceeded 95% for 5 minutes on prod-node-03",
+    "host": "prod-node-03",
+    "timestamp": "2026-08-18T10:23:00Z",
+    "labels": {
+      "env": "production",
+      "team": "network-ops"
+    }
+  },
+  {
+    "_scenario": "Warning - High Memory (延伸練習)",
+    "alertname": "HighMemoryUsage",
+    "service": "database-primary",
+    "severity": "warning",
+    "message": "Memory usage at 87%, approaching threshold of 90%",
+    "host": "db-prod-01",
+    "timestamp": "2026-08-18T11:45:00Z",
+    "labels": {
+      "env": "production",
+      "team": "network-ops"
+    }
+  },
+  {
+    "_scenario": "Critical - Service Down (延伸練習)",
+    "alertname": "ServiceDown",
+    "service": "auth-service",
+    "severity": "critical",
+    "message": "Health check failed for 3 consecutive attempts. Service is unreachable.",
+    "host": "auth-prod-02",
+    "timestamp": "2026-08-18T14:12:00Z",
+    "labels": {
+      "env": "production",
+      "team": "network-ops"
+    }
+  },
+  {
+    "_scenario": "Warning - Disk Space Low (Day 1 結尾延伸)",
+    "alertname": "DiskSpaceLow",
+    "service": "log-collector",
+    "severity": "warning",
+    "message": "Disk space usage at 82% on /var/log partition. Estimated 3 days until full.",
+    "host": "log-node-01",
+    "timestamp": "2026-08-18T09:00:00Z",
+    "labels": {
+      "env": "production",
+      "team": "network-ops"
+    }
+  },
+  {
+    "_scenario": "Critical - Network Interface Down (Day 3 Workshop 參考)",
+    "alertname": "NetworkInterfaceDown",
+    "service": "core-switch-01",
+    "severity": "critical",
+    "message": "Interface GE0/1 link down. Downstream devices may be affected.",
+    "host": "core-sw-prod-01",
+    "timestamp": "2026-08-18T15:30:00Z",
+    "labels": {
+      "env": "production",
+      "team": "network-ops"
+    }
+  }
+]

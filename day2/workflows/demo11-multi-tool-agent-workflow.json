@@ -1,0 +1,193 @@
+{
+  "name": "Demo 11 - 多工具 IT 故障診斷代理 [AI Agent + 4 Tools + Gemini]",
+  "nodes": [
+    {
+      "id": "c0842833-3aef-46ef-ae22-dd52891de3b2",
+      "name": "說明",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        240,
+        160
+      ],
+      "parameters": {
+        "content": "## Demo 11：多工具 IT 故障診斷代理\n**目的**：展示 AI Agent 如何根據情況自主選擇工具\n\n**架構**：Chat Trigger → AI Agent（4 Tools）→ Gemini\n\n**4 個工具**：\n- get_metrics（查 CPU/Memory/網路指標）\n- search_logs（查 Elasticsearch log）\n- lookup_runbook（查 IT 知識庫）\n- create_incident（開立 Jira Incident）\n\n**Demo 手順**：\n1. 在 Chat 輸入：「prod-node-03 的 CPU 一直很高，幫我診斷」\n2. 觀察 Agent 自動選擇 get_metrics → search_logs → lookup_runbook\n3. 再輸入：「請開立 Incident ticket」→ 觀察 create_incident 被呼叫",
+        "height": 340,
+        "width": 440,
+        "color": 5
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "74adbd1b-0ede-4a85-ac1c-61dd2be97558",
+      "name": "Chat Trigger",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "position": [
+        740,
+        360
+      ],
+      "parameters": {
+        "options": {
+          "title": "IT 故障診斷助理",
+          "subtitle": "描述問題，AI 自動選擇診斷工具"
+        }
+      },
+      "typeVersion": 1.1,
+      "webhookId": "eefd3449-6544-41fa-8f3e-88d8cc664319"
+    },
+    {
+      "id": "5a695079-d66d-4fd3-82a8-eedfbac20a0c",
+      "name": "AI Agent：IT SRE 助理",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "position": [
+        960,
+        360
+      ],
+      "parameters": {
+        "systemMessage": "你是一位資深 IT SRE（網站可靠性工程師），專門處理台灣科技公司的 IT 維運問題。\n\n可用工具：\n- get_metrics：查詢伺服器 CPU、Memory、網路流量等即時指標\n- search_logs：在 Elasticsearch 搜尋系統 log\n- lookup_runbook：查詢 IT 知識庫中的問題解決方案\n- create_incident：在 Jira 開立 Incident ticket\n\n工作原則：\n1. 先用 get_metrics 了解目前狀態\n2. 如有異常，用 search_logs 找根因\n3. 用 lookup_runbook 找對應的解決方案\n4. 只有在確認是 P1/P2 問題且需要人工介入時，才呼叫 create_incident\n5. 每個步驟都要向使用者解釋為什麼選這個工具"
+      },
+      "typeVersion": 1.7
+    },
+    {
+      "id": "51378f67-0d09-49c1-9187-114fd3a9c90e",
+      "name": "Tool：get_metrics",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "position": [
+        720,
+        580
+      ],
+      "parameters": {
+        "name": "get_metrics",
+        "description": "查詢指定主機的即時效能指標（CPU、Memory、網路流量、磁碟 IO）。輸入：host_name（字串）",
+        "language": "javaScript",
+        "jsCode": "// Mock 效能指標資料\nconst hostData = {\n  'prod-node-03': { cpu: 94, memory: 78, network_in: 1200, network_out: 340, disk_io: 45, status: 'warning' },\n  'prod-node-01': { cpu: 23, memory: 45, network_in: 800, network_out: 200, disk_io: 12, status: 'normal' },\n  'prod-db-01': { cpu: 67, memory: 88, network_in: 450, network_out: 120, disk_io: 92, status: 'critical' },\n};\n\nconst host = query.host_name || 'prod-node-03';\nconst data = hostData[host] || { cpu: 50, memory: 50, status: 'unknown' };\n\nreturn JSON.stringify({\n  host,\n  timestamp: new Date().toISOString(),\n  metrics: data,\n  alert: data.cpu > 90 ? 'CPU CRITICAL: 超過 90%' : data.cpu > 80 ? 'CPU WARNING: 超過 80%' : 'CPU 正常'\n});"
+      },
+      "typeVersion": 1.1
+    },
+    {
+      "id": "bd28fa3f-0ba6-4e56-b5d8-8775688dcb8e",
+      "name": "Tool：search_logs",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "position": [
+        880,
+        580
+      ],
+      "parameters": {
+        "name": "search_logs",
+        "description": "在 Elasticsearch 搜尋系統 log。輸入：keyword（搜尋關鍵字）、host（可選，主機名稱）",
+        "language": "javaScript",
+        "jsCode": "// Mock Log 搜尋結果\nconst logs = [\n  { time: '10:23:41', level: 'ERROR', msg: 'OOM Killer activated: process api-server (pid 34521) killed', host: 'prod-node-03' },\n  { time: '10:23:38', level: 'WARN',  msg: 'Memory pressure: 94% used, swap usage 100%', host: 'prod-node-03' },\n  { time: '10:23:35', level: 'ERROR', msg: 'Cannot allocate memory for new thread in api-server', host: 'prod-node-03' },\n  { time: '10:22:10', level: 'INFO',  msg: 'Deployment of api-server v2.3.1 completed', host: 'prod-node-03' },\n  { time: '10:20:00', level: 'INFO',  msg: 'CPU throttling disabled for cpu.cfs_quota_us=-1', host: 'prod-node-03' },\n];\n\nconst kw = (query.keyword || '').toLowerCase();\nconst host = query.host || 'prod-node-03';\n\nconst filtered = logs.filter(l =>\n  (l.host === host) && (kw === '' || l.msg.toLowerCase().includes(kw) || l.level.toLowerCase().includes(kw))\n);\n\nreturn JSON.stringify({ total: filtered.length, logs: filtered, suggestion: '最近有部署 api-server v2.3.1，可能是 Memory leak 導致 OOM' });"
+      },
+      "typeVersion": 1.1
+    },
+    {
+      "id": "b08379c3-91d8-4cc4-a984-264e1c533d5a",
+      "name": "Tool：lookup_runbook",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "position": [
+        1040,
+        580
+      ],
+      "parameters": {
+        "name": "lookup_runbook",
+        "description": "查詢 IT 知識庫中對應問題的 Runbook（標準作業程序）。輸入：issue_type（問題類型，如 OOM、CPU_high、disk_full）",
+        "language": "javaScript",
+        "jsCode": "// Mock Runbook 知識庫\nconst runbooks = {\n  'OOM': {\n    title: 'OOM (Out of Memory) 處理 SOP',\n    severity: 'P1',\n    steps: ['1. 確認哪個 process 被 OOM Killer 終止', '2. 執行 kubectl rollout restart 重啟 pod', '3. 調高 Memory Limit 至 2x 當前值', '4. 部署後監控 30 分鐘', '5. 若再發生，開 Jira Epic 進行 memory profiling'],\n    auto_fix: 'kubectl rollout restart deployment/api-server -n production',\n    escalate_if: '重啟後 15 分鐘內再次 OOM'\n  },\n  'CPU_high': {\n    title: 'CPU 過高處理 SOP',\n    severity: 'P2',\n    steps: ['1. 用 top/htop 找出高 CPU process', '2. 查看最近 30 分鐘 deployment 記錄', '3. 若有新部署，評估是否 rollback', '4. 設定 HPA（Horizontal Pod Autoscaler）'],\n    auto_fix: 'kubectl top pods -n production --sort-by=cpu',\n    escalate_if: 'CPU > 90% 持續超過 15 分鐘'\n  },\n};\n\nconst issue = query.issue_type || 'OOM';\nconst rb = runbooks[issue] || runbooks['CPU_high'];\n\nreturn JSON.stringify({ issue_type: issue, runbook: rb, last_updated: '2026-05-15' });"
+      },
+      "typeVersion": 1.1
+    },
+    {
+      "id": "8e7bd2e3-dc75-4ace-b119-ac4f624b36e1",
+      "name": "Tool：create_incident",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "position": [
+        1200,
+        580
+      ],
+      "parameters": {
+        "name": "create_incident",
+        "description": "在 Jira 開立 IT Incident ticket。輸入：title（標題）、severity（P1/P2/P3）、description（問題描述）、host（主機名稱）",
+        "language": "javaScript",
+        "jsCode": "// Mock Jira Incident 建立\nconst ticketId = 'ITOPS-' + Math.floor(Math.random() * 9000 + 1000);\nconst ticket = {\n  id: ticketId,\n  status: 'created',\n  title: query.title || 'AI 自動偵測 Incident',\n  severity: query.severity || 'P2',\n  host: query.host || 'unknown',\n  description: query.description || '由 AI Agent 自動建立',\n  assignee: 'oncall-engineer',\n  created_at: new Date().toISOString(),\n  jira_url: 'https://tsmc-it.atlassian.net/browse/' + ticketId,\n  pagerduty: severity === 'P1' ? 'PagerDuty 已通知 On-call 工程師' : '一般通知已發送'\n};\n\nreturn JSON.stringify({ success: true, ticket });"
+      },
+      "typeVersion": 1.1
+    },
+    {
+      "id": "c81e44db-0827-4564-a140-f100ac74da2f",
+      "name": "Google Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "position": [
+        960,
+        580
+      ],
+      "parameters": {
+        "modelName": "models/gemini-1.5-flash",
+        "options": {}
+      },
+      "credentials": {
+        "googlePalmApi": {
+          "id": "G7B3Jkm3AiKjF1gY",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      },
+      "typeVersion": 1
+    }
+  ],
+  "connections": {
+    "Chat Trigger": {
+      "main": [
+        [
+          {
+            "node": "AI Agent：IT SRE 助理",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent：IT SRE 助理": {
+      "ai_tool": [
+        [
+          {
+            "node": "Tool：get_metrics",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Tool：search_logs",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Tool：lookup_runbook",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Tool：create_incident",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ],
+      "ai_languageModel": [
+        [
+          {
+            "node": "Google Gemini Chat Model",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

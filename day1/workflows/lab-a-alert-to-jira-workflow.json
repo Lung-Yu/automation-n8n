@@ -1,0 +1,298 @@
+{
+  "updatedAt": "2026-06-14T05:58:14.480Z",
+  "createdAt": "2026-06-14T05:45:03.123Z",
+  "id": "253iBykZU5N9SC8H",
+  "name": "Lab A - 告警→AI→Jira [Webhook + Google Gemini Node + Jira API]",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "la-wh",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lab-a-alert",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "cf22c409-911f-4970-ad4e-d617f0967c38"
+    },
+    {
+      "id": "la-set",
+      "name": "Parse Alert Fields",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [
+        460,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "fields": {
+          "values": [
+            {
+              "name": "alert_name",
+              "type": "stringValue",
+              "value": "={{ $json.body.alert_name || $json.alert_name || 'Unknown Alert' }}"
+            },
+            {
+              "name": "service",
+              "type": "stringValue",
+              "value": "={{ $json.body.service    || $json.service    || 'Unknown' }}"
+            },
+            {
+              "name": "severity",
+              "type": "stringValue",
+              "value": "={{ $json.body.severity   || $json.severity   || 'warning' }}"
+            },
+            {
+              "name": "raw_message",
+              "type": "stringValue",
+              "value": "={{ $json.body.message    || $json.message    || '' }}"
+            },
+            {
+              "name": "host",
+              "type": "stringValue",
+              "value": "={{ $json.body.host       || $json.host       || 'unknown-host' }}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "la-gemini",
+      "name": "Gemini：生成 Jira 內容",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        680,
+        300
+      ],
+      "parameters": {
+        "resource": "text",
+        "operation": "message",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.0-flash",
+          "mode": "list"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "={{ \"你是 TSMC IT 維運工程師。根據以下監控告警，生成 Jira incident ticket 的內容。\\n\\n告警資訊：\\n\" + JSON.stringify($json) + \"\\n\\n請只回傳以下 JSON（不要任何其他文字、不要 markdown ``` 包裹）：\\n{\\n  \\\"summary\\\": \\\"[Critical/High/Warning] 簡短標題（15字以內）\\\",\\n  \\\"description\\\": \\\"詳細描述：影響範圍、可能原因、建議動作（3-5行）\\\",\\n  \\\"priority\\\": \\\"Critical\\\"\\n}\\n\\npriority 只能選：Critical, High, Medium, Low\" }}",
+              "role": "user"
+            }
+          ]
+        },
+        "simplifyOutput": true
+      },
+      "credentials": {
+        "googlePalmApi": {
+          "id": "G7B3Jkm3AiKjF1gY",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "id": "la-parse",
+      "name": "Parse Gemini Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const text = $input.item.json.candidates?.[0]?.content?.parts?.[0]?.text || '{}';\nconst clean = text.replace(/```json\\n?|```/g, '').trim();\nlet parsed = {};\ntry { parsed = JSON.parse(clean); } catch(e) { parsed = {summary: 'Parse error', description: text, priority: 'Medium'}; }\nconst prev = $('Parse Alert Fields').item.json;\nreturn [{ json: {\n  jira_summary:     parsed.summary     || 'Alert: ' + prev.alert_name,\n  jira_description: parsed.description || prev.raw_message,\n  jira_priority:    parsed.priority    || 'High',\n  alert_name: prev.alert_name,\n  service:    prev.service,\n  severity:   prev.severity,\n  host:       prev.host\n} }];"
+      }
+    },
+    {
+      "id": "la-jira",
+      "name": "Jira: Create Issue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-DOMAIN.atlassian.net/rest/api/2/issue",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "string",
+        "body": "={{ JSON.stringify({ fields: { project: { key: \"IT-DEMO\" }, summary: $json.jira_summary, description: $json.jira_description, issuetype: { name: \"Incident\" }, priority: { name: $json.jira_priority } } }) }}",
+        "options": {
+          "headers": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "la-resp",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        300
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: \"ok\", jira_key: $json.key || \"IT-DEMO-?\", summary: $(\"Parse Gemini Response\").item.json.jira_summary }) }}"
+      }
+    },
+    {
+      "id": "la-manual",
+      "name": "Demo Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -20,
+        500
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "la-demo",
+      "name": "Demo Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        500
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: {\n  alert_name: \"High CPU Usage\",\n  service:    \"api-server\",\n  severity:   \"critical\",\n  message:    \"CPU usage 98% sustained for 5 minutes on prod-01\",\n  host:       \"prod-01\"\n} }];"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse Alert Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Alert Fields": {
+      "main": [
+        [
+          {
+            "node": "Gemini：生成 Jira 內容",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Gemini Response": {
+      "main": [
+        [
+          {
+            "node": "Jira: Create Issue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Jira: Create Issue": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Demo Trigger": {
+      "main": [
+        [
+          {
+            "node": "Demo Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Demo Alert": {
+      "main": [
+        [
+          {
+            "node": "Parse Alert Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini：生成 Jira 內容": {
+      "main": [
+        [
+          {
+            "node": "Parse Gemini Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveManualExecutions": true
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "cf5f27ab-ad3f-4885-8465-c068c76bc109",
+  "activeVersionId": null,
+  "versionCounter": 7,
+  "triggerCount": 1,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-06-14T05:45:03.125Z",
+      "createdAt": "2026-06-14T05:45:03.125Z",
+      "role": "workflow:owner",
+      "workflowId": "253iBykZU5N9SC8H",
+      "projectId": "b7aG3BLFpa4oT4cn",
+      "project": {
+        "updatedAt": "2026-06-13T23:09:05.573Z",
+        "createdAt": "2026-06-13T23:08:40.990Z",
+        "id": "b7aG3BLFpa4oT4cn",
+        "name": "Test Lab <test@lab.local>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "b785c41d-832e-4c85-8e52-40f7e444f808"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}

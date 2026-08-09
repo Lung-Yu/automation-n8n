@@ -1,0 +1,264 @@
+{
+  "updatedAt": "2026-06-14T06:43:52.108Z",
+  "createdAt": "2026-06-14T06:12:32.288Z",
+  "id": "w8PDhnDni9rslP9Y",
+  "name": "Demo 2 - Error Handling [continueOnFail + Error Trigger]",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "e-wh",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "demo-error",
+        "options": {}
+      },
+      "webhookId": "8b8402ce-92dc-459c-8850-ed79cfe42251"
+    },
+    {
+      "id": "e-ok-trigger",
+      "name": "Demo Trigger (成功案例)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -20,
+        460
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "e-ok-payload",
+      "name": "Demo Payload (有 required_field)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        460
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { required_field: 'prod-node-03' } }];"
+      }
+    },
+    {
+      "id": "e-err-trigger",
+      "name": "Demo Trigger (失敗案例)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -20,
+        600
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "e-err-payload",
+      "name": "Demo Payload (缺少 required_field)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        600
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { other_field: 'no required_field' } }];"
+      }
+    },
+    {
+      "id": "e-try",
+      "name": "Try: 驗證與處理",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        480
+      ],
+      "continueOnFail": true,
+      "parameters": {
+        "jsCode": "const input = $input.item.json.body || $input.item.json;\nif (!input.required_field) {\n  throw new Error('Missing required_field in payload');\n}\nreturn [{ json: { status: 'ok', processed: input.required_field, timestamp: new Date().toISOString() } }];"
+      }
+    },
+    {
+      "id": "e-if",
+      "name": "IF: 是否出錯？",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        680,
+        480
+      ],
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and",
+          "options": {}
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "e-catch",
+      "name": "Catch: 錯誤處理",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        380
+      ],
+      "parameters": {
+        "jsCode": "const errMsg = $input.item.json.error || 'Unknown error';\nconsole.log('Error caught:', errMsg);\nreturn [{ json: {\n  result:     'error',\n  error_msg:  errMsg,\n  timestamp:  new Date().toISOString(),\n  suggestion: '請確認 payload 包含 required_field 欄位'\n} }];"
+      }
+    },
+    {
+      "id": "e-ok",
+      "name": "Success: 處理完成",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        580
+      ],
+      "parameters": {
+        "jsCode": "console.log('Success:', $json.processed);\nreturn [{ json: { ...$input.item.json, result: 'success' } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Try: 驗證與處理",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Demo Trigger (成功案例)": {
+      "main": [
+        [
+          {
+            "node": "Demo Payload (有 required_field)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Demo Payload (有 required_field)": {
+      "main": [
+        [
+          {
+            "node": "Try: 驗證與處理",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Demo Trigger (失敗案例)": {
+      "main": [
+        [
+          {
+            "node": "Demo Payload (缺少 required_field)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Demo Payload (缺少 required_field)": {
+      "main": [
+        [
+          {
+            "node": "Try: 驗證與處理",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Try: 驗證與處理": {
+      "main": [
+        [
+          {
+            "node": "IF: 是否出錯？",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: 是否出錯？": {
+      "main": [
+        [
+          {
+            "node": "Catch: 錯誤處理",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Success: 處理完成",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "versionId": "b93b1b77-9ff5-47ed-a0ed-815e716aa2a8",
+  "activeVersionId": null,
+  "versionCounter": 11,
+  "triggerCount": 1,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-06-14T06:12:32.288Z",
+      "createdAt": "2026-06-14T06:12:32.288Z",
+      "role": "workflow:owner",
+      "workflowId": "w8PDhnDni9rslP9Y",
+      "projectId": "b7aG3BLFpa4oT4cn",
+      "project": {
+        "updatedAt": "2026-06-13T23:09:05.573Z",
+        "createdAt": "2026-06-13T23:08:40.990Z",
+        "id": "b7aG3BLFpa4oT4cn",
+        "name": "Test Lab <test@lab.local>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "b785c41d-832e-4c85-8e52-40f7e444f808"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}

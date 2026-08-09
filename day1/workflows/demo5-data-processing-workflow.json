@@ -1,0 +1,192 @@
+{
+  "updatedAt": "2026-06-14T07:02:23.605Z",
+  "createdAt": "2026-06-14T07:02:23.605Z",
+  "id": "oJwF0hkhjPDWTH7c",
+  "name": "Demo 5 - 資料處理進階 [Set + Merge + Code]",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "d5-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "d5-devices",
+      "name": "Load: 多台設備狀態",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// 模擬從 API 拿到的設備清單（多筆 items）\nreturn [\n  { json: { host: 'core-sw-01', cpu: 92, memory: 78, status: 'critical', region: 'fab-12' } },\n  { json: { host: 'core-sw-02', cpu: 45, memory: 60, status: 'ok',       region: 'fab-12' } },\n  { json: { host: 'dist-sw-03', cpu: 78, memory: 85, status: 'warning',  region: 'fab-14' } },\n  { json: { host: 'access-01',  cpu: 23, memory: 40, status: 'ok',       region: 'fab-14' } },\n  { json: { host: 'border-gw',  cpu: 88, memory: 92, status: 'critical', region: 'corp'   } },\n];"
+      }
+    },
+    {
+      "id": "d5-filter",
+      "name": "Code: 過濾 Critical 設備",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        200
+      ],
+      "parameters": {
+        "jsCode": "// $input.all() 拿到所有 items\nconst all = $input.all();\nconst critical = all.filter(item => item.json.status === 'critical');\nconsole.log('Total:', all.length, '| Critical:', critical.length);\nreturn critical;"
+      }
+    },
+    {
+      "id": "d5-summary",
+      "name": "Code: 依 Region 彙整",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        440
+      ],
+      "parameters": {
+        "jsCode": "// 用 reduce 把多筆 items 聚合成一筆報表\nconst all = $input.all();\nconst byRegion = all.reduce((acc, item) => {\n  const r = item.json.region;\n  if (!acc[r]) acc[r] = { region: r, total: 0, critical: 0, avgCpu: 0, cpuSum: 0 };\n  acc[r].total++;\n  acc[r].cpuSum += item.json.cpu;\n  if (item.json.status === 'critical') acc[r].critical++;\n  return acc;\n}, {});\n\nreturn Object.values(byRegion).map(r => ({\n  json: { ...r, avgCpu: Math.round(r.cpuSum / r.total) }\n}));"
+      }
+    },
+    {
+      "id": "d5-merge",
+      "name": "Merge: 合併兩路結果",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        900,
+        300
+      ],
+      "parameters": {
+        "mode": "append",
+        "options": {}
+      }
+    },
+    {
+      "id": "d5-set",
+      "name": "Set: 組成報告",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [
+        1120,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": true,
+        "fields": {
+          "values": [
+            {
+              "name": "generated_at",
+              "type": "stringValue",
+              "value": "={{ new Date().toISOString() }}"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load: 多台設備狀態",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load: 多台設備狀態": {
+      "main": [
+        [
+          {
+            "node": "Code: 過濾 Critical 設備",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Code: 依 Region 彙整",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: 過濾 Critical 設備": {
+      "main": [
+        [
+          {
+            "node": "Merge: 合併兩路結果",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: 依 Region 彙整": {
+      "main": [
+        [
+          {
+            "node": "Merge: 合併兩路結果",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge: 合併兩路結果": {
+      "main": [
+        [
+          {
+            "node": "Set: 組成報告",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "f608693a-8600-44f8-bf0d-f0fc369a260b",
+  "activeVersionId": null,
+  "versionCounter": 2,
+  "triggerCount": 0,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-06-14T07:02:23.608Z",
+      "createdAt": "2026-06-14T07:02:23.608Z",
+      "role": "workflow:owner",
+      "workflowId": "oJwF0hkhjPDWTH7c",
+      "projectId": "b7aG3BLFpa4oT4cn",
+      "project": {
+        "updatedAt": "2026-06-13T23:09:05.573Z",
+        "createdAt": "2026-06-13T23:08:40.990Z",
+        "id": "b7aG3BLFpa4oT4cn",
+        "name": "Test Lab <test@lab.local>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "b785c41d-832e-4c85-8e52-40f7e444f808"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}

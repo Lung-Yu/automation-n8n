@@ -1,0 +1,131 @@
+{
+  "id": "26374efd-8ec0-45",
+  "name": "Demo 8 - 知識庫 RAG 代理 [AI Agent + Qdrant Tool + Gemini]",
+  "nodes": [
+    {
+      "id": "5f503996-c909-4be9-b887-2e2a341b5abd",
+      "name": "說明",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        60,
+        140
+      ],
+      "parameters": {
+        "color": 6,
+        "content": "## Demo 8 — 知識庫 RAG 代理\n\n**目的**：AI Agent 主動查詢 Qdrant 知識庫，回答 IT 維運問題\n\n**架構**\n- Chat Trigger：對話輸入\n- AI Agent：決定何時查知識庫\n- Code Tool：自動向量化 → Qdrant 搜尋 → 返回段落\n- Google Gemini Chat Model：語言模型\n\n**Demo 問題**\n- 「BGP session 掉線怎麼處理？」\n- 「Critical 告警的 SLA？」\n- 「LACP 故障排除步驟？」\n\n**技術重點**：Agent 自己判斷要不要查知識庫"
+      }
+    },
+    {
+      "id": "177458c1-37e1-46b6-a42d-e5ab1e4f2369",
+      "name": "Chat Trigger",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        300,
+        320
+      ],
+      "parameters": {
+        "options": {
+          "title": "Demo 8：IT 維運知識庫代理",
+          "inputPlaceholder": "問我 IT 維運問題，例如：BGP session down 怎麼處理？",
+          "loadPreviousSession": "memory"
+        }
+      },
+      "webhookId": "48696b95-42bf-4f8d-bed0-5aef3f387643"
+    },
+    {
+      "id": "f2c289f5-4d4f-4902-a4d1-aa971f23c619",
+      "name": "AI Agent：知識庫助理",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        520,
+        320
+      ],
+      "parameters": {
+        "agent": "toolsAgent",
+        "promptType": "define",
+        "text": "={{ $json.chatInput }}",
+        "options": {
+          "systemMessage": "你是 TSMC IT 維運知識庫助理。有一個工具可以查詢內部知識庫（Network Runbook 和 IT SOP）。具體技術問題先查知識庫再回答。語言：繁體中文"
+        }
+      }
+    },
+    {
+      "id": "d9c8cf7b-598a-4be2-9c5f-452fbda5ce11",
+      "name": "RAG Tool：查詢知識庫",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.1,
+      "position": [
+        420,
+        520
+      ],
+      "parameters": {
+        "name": "search_knowledge_base",
+        "description": "搜尋 IT 維運知識庫（Network Runbook + IT SOP），輸入使用者的問題，自動向量化後查 Qdrant，返回最相關段落",
+        "language": "javaScript",
+        "code": "const query = $fromAI('query', '要搜尋的問題');\nconst embedResp = await $http.request({\n  method: 'POST',\n  url: 'http://host.containers.internal:3003/v1beta/models/text-embedding-004:embedContent?key=TEST',\n  headers: {'Content-Type': 'application/json'},\n  body: JSON.stringify({ content: { parts: [{ text: query }] }, taskType: 'RETRIEVAL_QUERY' })\n});\nconst vector = JSON.parse(embedResp.body).embedding.values;\nconst searchResp = await $http.request({\n  method: 'POST',\n  url: 'http://host.containers.internal:6333/collections/sop_knowledge/points/search',\n  headers: {'Content-Type': 'application/json'},\n  body: JSON.stringify({ vector, limit: 5, with_payload: true })\n});\nconst hits = JSON.parse(searchResp.body).result || [];\nif (!hits.length) return '（知識庫無相關資料）';\nreturn hits.map((h,i) => '[' + (i+1) + '] ' + h.payload.source + ' > ' + h.payload.section + '\n' + h.payload.text).join('\n\n---\n\n');"
+      }
+    },
+    {
+      "id": "2ead4d8e-bcda-4209-9a6e-34c512f56202",
+      "name": "Google Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        620,
+        520
+      ],
+      "parameters": {
+        "modelName": "models/gemini-2.0-flash",
+        "options": {}
+      },
+      "credentials": {
+        "googlePalmApi": {
+          "id": "G7B3Jkm3AiKjF1gY",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Chat Trigger": {
+      "main": [
+        [
+          {
+            "node": "AI Agent：知識庫助理",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG Tool：查詢知識庫": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent：知識庫助理",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent：知識庫助理",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "378ccaec-5d6e-4036-8ff3-8b2611d732ae"
+}

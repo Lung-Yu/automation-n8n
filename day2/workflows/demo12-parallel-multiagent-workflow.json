@@ -1,0 +1,315 @@
+{
+  "name": "Demo 12 - 並行多代理週報系統 [Orchestrator + 3 Specialists]",
+  "nodes": [
+    {
+      "id": "66042d18-e8c8-4c3a-872f-f0b574cd705b",
+      "name": "說明",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        240,
+        140
+      ],
+      "parameters": {
+        "content": "## Demo 12：並行多代理週報系統\n\n**目的**：展示多個專家代理協作產生 IT 週報\n\n**架構**：\n```\nManual Trigger\n  → 準備本週事件資料\n  → Execute Workflow × 3（並行呼叫 3 位專家）\n      ├── 資安分析師\n      ├── 效能分析師  \n      └── 容量規劃師\n  → Code（合併 3 份分析）\n  → AI Agent（合成最終週報）\n```\n\n**Demo 手順**：\n1. 先匯入並啟動「Demo 12 子代理」工作流\n2. 在 Execute Workflow 節點設定子代理 Workflow ID\n3. 點選 Manual Trigger 執行\n4. 觀察 3 個專家同時分析不同面向\n5. 看最終 AI 合成的完整週報",
+        "height": 380,
+        "width": 480,
+        "color": 5
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "c12b8393-38f5-4407-a057-88e3c144cf23",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "position": [
+        780,
+        380
+      ],
+      "parameters": {},
+      "typeVersion": 1
+    },
+    {
+      "id": "970551d7-8a28-4c76-9656-859705220e77",
+      "name": "準備：本週 IT 事件資料",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        980,
+        380
+      ],
+      "parameters": {
+        "options": {},
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8ddbf59a-4d0f-45fb-9a1a-ba77153348a0",
+              "name": "week",
+              "value": "2026-W24",
+              "type": "string"
+            },
+            {
+              "id": "e677916b-4d7f-4047-a656-e5bd1ca7dab5",
+              "name": "security_task",
+              "value": {
+                "domain": "security",
+                "role": "資安分析師（Security Analyst），專注於漏洞、入侵偵測、合規風險",
+                "data": "{\"incidents\": [{\"id\":\"SEC-001\",\"type\":\"Unauthorized Access\",\"host\":\"prod-db-01\",\"time\":\"2026-06-09 03:14\",\"detail\":\"5次 SSH 失敗嘗試後成功登入，來源 IP: 223.18.x.x（非公司 VPN）\"},{\"id\":\"SEC-002\",\"type\":\"SSL Certificate\",\"host\":\"api.internal\",\"time\":\"2026-06-11\",\"detail\":\"SSL 憑證將於 7 天後到期\"},{\"id\":\"SEC-003\",\"type\":\"Dependency Alert\",\"host\":\"all\",\"time\":\"2026-06-12\",\"detail\":\"npm audit: 2 個 High 漏洞 in express 4.18.0\"}], \"open_count\": 3, \"closed_this_week\": 1}"
+              },
+              "type": "object"
+            },
+            {
+              "id": "8bda96d2-a054-461a-b15a-410e7abf2b48",
+              "name": "perf_task",
+              "value": {
+                "domain": "performance",
+                "role": "效能分析師（Performance Analyst），專注於回應時間、吞吐量、OOM 事件",
+                "data": "{\"incidents\": [{\"id\":\"PERF-001\",\"type\":\"OOM\",\"host\":\"prod-node-03\",\"time\":\"2026-06-10\",\"detail\":\"api-server OOM Killed 3次，在部署 v2.3.1 後發生\"},{\"id\":\"PERF-002\",\"type\":\"Slow Query\",\"host\":\"prod-db-01\",\"time\":\"2026-06-11\",\"detail\":\"P95 查詢延遲 8.2s（SLA 要求 <2s），影響 user-profile endpoint\"},{\"id\":\"PERF-003\",\"type\":\"High CPU\",\"host\":\"prod-node-03\",\"time\":\"2026-06-13\",\"detail\":\"CPU 持續 94%，已重啟服務暫時緩解\"}], \"avg_response_ms\": 1240, \"p95_response_ms\": 8200}"
+              },
+              "type": "object"
+            },
+            {
+              "id": "46c3d993-1e94-40f9-ae61-f22002bc71b1",
+              "name": "capacity_task",
+              "value": {
+                "domain": "capacity",
+                "role": "容量規劃師（Capacity Planner），專注於資源使用趨勢、擴充建議、成本最佳化",
+                "data": "{\"resources\": [{\"host\":\"prod-node-03\",\"cpu_avg\":\"73%\",\"cpu_peak\":\"94%\",\"mem_avg\":\"82%\",\"disk_used\":\"78%\",\"trend\":\"↑ CPU +15% vs last week\"},{\"host\":\"prod-db-01\",\"cpu_avg\":\"45%\",\"mem_avg\":\"88%\",\"disk_used\":\"91%\",\"trend\":\"↑ Disk +8% vs last week\"},{\"host\":\"prod-node-01\",\"cpu_avg\":\"22%\",\"mem_avg\":\"41%\",\"disk_used\":\"45%\",\"trend\":\"stable\"}], \"forecast\": {\"prod-db-01 disk full\": \"預估 3 週後達 100%\", \"prod-node-03 mem\": \"若 OOM 未解，預估 1 週後需擴容\"}}"
+              },
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "typeVersion": 3.4
+    },
+    {
+      "id": "54e144ac-759b-4565-8973-d9a057e1b9da",
+      "name": "呼叫：資安分析師",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "position": [
+        1200,
+        260
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "QeL08egstGlxDeA9"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "domain": "={{ $json.security_task.domain }}",
+            "role": "={{ $json.security_task.role }}",
+            "data": "={{ JSON.stringify($json.security_task.data) }}"
+          }
+        }
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "0c59ddb2-a6dc-4a2c-a0fe-7a1498040882",
+      "name": "呼叫：效能分析師",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "position": [
+        1200,
+        400
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "QeL08egstGlxDeA9"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "domain": "={{ $json.perf_task.domain }}",
+            "role": "={{ $json.perf_task.role }}",
+            "data": "={{ JSON.stringify($json.perf_task.data) }}"
+          }
+        }
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "fe304e92-6d99-41b2-88e3-527864fb9e03",
+      "name": "呼叫：容量規劃師",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "position": [
+        1200,
+        540
+      ],
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "QeL08egstGlxDeA9"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "domain": "={{ $json.capacity_task.domain }}",
+            "role": "={{ $json.capacity_task.role }}",
+            "data": "={{ JSON.stringify($json.capacity_task.data) }}"
+          }
+        }
+      },
+      "typeVersion": 2
+    },
+    {
+      "id": "26c012ef-2617-450d-9edc-599845a85190",
+      "name": "合併：三份分析結果",
+      "type": "n8n-nodes-base.merge",
+      "position": [
+        1440,
+        400
+      ],
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineAll",
+        "options": {}
+      },
+      "typeVersion": 3
+    },
+    {
+      "id": "0363c53e-d83c-4d77-bfec-10d84932af10",
+      "name": "AI Agent：週報合成師",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "position": [
+        1660,
+        400
+      ],
+      "parameters": {
+        "systemMessage": "你是一位 IT 技術寫作專家，負責將多位專家的分析整合成一份專業的 IT 週報。\n\n週報格式（Markdown）：\n# IT 週報 [週次]\n\n## 執行摘要（3句話以內）\n\n## 本週重大事件\n### 🔐 資安\n### ⚡ 效能\n### 📊 容量規劃\n\n## 重點行動項目（依優先順序）\n| 優先級 | 行動 | 負責人 | 截止日 |\n\n## 下週預計工作\n\n語氣：專業但不艱澀，適合 IT 主管閱讀。",
+        "promptType": "define",
+        "text": "請根據以下三位專家的分析，整合成一份完整的 IT 週報：\n\n{{ $json.toString() }}"
+      },
+      "typeVersion": 1.7
+    },
+    {
+      "id": "177983f6-77a8-430f-b569-29257bed0d08",
+      "name": "Google Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "position": [
+        1660,
+        560
+      ],
+      "parameters": {
+        "modelName": "models/gemini-1.5-flash",
+        "options": {}
+      },
+      "credentials": {
+        "googlePalmApi": {
+          "id": "G7B3Jkm3AiKjF1gY",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      },
+      "typeVersion": 1
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "準備：本週 IT 事件資料",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "準備：本週 IT 事件資料": {
+      "main": [
+        [
+          {
+            "node": "呼叫：資安分析師",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "呼叫：效能分析師",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "呼叫：容量規劃師",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "呼叫：資安分析師": {
+      "main": [
+        [
+          {
+            "node": "合併：三份分析結果",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "呼叫：效能分析師": {
+      "main": [
+        [
+          {
+            "node": "合併：三份分析結果",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "呼叫：容量規劃師": {
+      "main": [
+        [
+          {
+            "node": "合併：三份分析結果",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "合併：三份分析結果": {
+      "main": [
+        [
+          {
+            "node": "AI Agent：週報合成師",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent：週報合成師": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Google Gemini Chat Model",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

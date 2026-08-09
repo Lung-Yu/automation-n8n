@@ -1,0 +1,113 @@
+{
+  "id": "b20fb601-d845-43",
+  "name": "Sub-Agent C - 安全事件代理 [Specialist]",
+  "nodes": [
+    {
+      "id": "0e604655-dda7-475a-8507-3170ec1eee6a",
+      "name": "說明",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        60,
+        140
+      ],
+      "parameters": {
+        "color": 5,
+        "content": "## Sub-Agent C - 安全事件代理 [Specialist]\n\n**角色**：你是資安專家，專精異常存取/權限問題/安全事件分析。\n\n接收 POST {\"query\":\"事件\"}\n返回 {\"analysis\":\"分析\"}\n\n被 Demo 10 Orchestrator 呼叫"
+      }
+    },
+    {
+      "id": "2fe3e94f-1e0f-45f6-adbf-6ded717b7115",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        320
+      ],
+      "webhookId": "84333518-1190-490a-a000-5995866926b1",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "84333518-1190-490a-a000-5995866926b1",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "46e72676-d269-4dce-87f9-9c3161683a92",
+      "name": "Gemini：安全事件",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        460,
+        320
+      ],
+      "parameters": {
+        "resource": "text",
+        "operation": "message",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.0-flash",
+          "mode": "list"
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "user",
+              "content": "={{ \"你是資安專家，專精異常存取/權限問題/安全事件分析。\\n\\n收到事件：\" + ($json.body?.query || $json.query || '未提供') + \"\\n\\n只回傳 JSON：{\\\"agent\\\": \\\"安全事件\\\", \\\"findings\\\": \\\"發現的問題\\\", \\\"risk_level\\\": \\\"高/中/低\\\", \\\"recommendations\\\": [\\\"建議1\\\", \\\"建議2\\\"]}\" }}"
+            }
+          ]
+        },
+        "simplifyOutput": true
+      },
+      "credentials": {
+        "googlePalmApi": {
+          "id": "G7B3Jkm3AiKjF1gY",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "id": "a066bf2b-f41d-4535-9ed2-a6d36f43b184",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        680,
+        320
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {analysis: $json.output} }}"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Gemini：安全事件",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini：安全事件": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "a1d9a8df-70d6-4981-9502-cce1381b8eaf"
+}

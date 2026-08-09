@@ -1,0 +1,145 @@
+{
+  "name": "Adv 2 - 每日 AI 維運日報 [Schedule + Alerts History + Gemini 摘要]",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Adv 2：每日 AI 維運日報（Scheduled AI Report）\n\n**情境**：每天早上 08:00 自動彙整過去 24 小時告警，\n由 AI 生成人類可讀的維運摘要。\n\n**流程**：\nSchedule（每日 08:00）→ 抓告警歷史 → Code 統計聚合\n→ Gemini 生成日報 → 格式化輸出\n\n**課堂演示**：直接按 Execute Workflow 立即觸發一次。\n**回 TSMC 延伸**：最後接 Email/Teams/LINE 節點推送。",
+        "height": 300,
+        "width": 440
+      },
+      "id": "adv2-note",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-64, -80]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * *"
+            }
+          ]
+        }
+      },
+      "id": "adv2-cron",
+      "name": "每日 08:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-16, 304]
+    },
+    {
+      "parameters": {
+        "url": "http://host.containers.internal:3001/api/alerts/history",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "hours",
+              "value": "24"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "adv2-fetch",
+      "name": "取得 24hr 告警歷史",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [208, 304]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 聚合統計：AI 不擅長算數，數字先在 Code 算好再給 AI 寫摘要\nconst alerts = $json.alerts || [];\nconst bySeverity = {};\nconst byHost = {};\nconst byAlertname = {};\nfor (const a of alerts) {\n  bySeverity[a.severity] = (bySeverity[a.severity] || 0) + 1;\n  byHost[a.host] = (byHost[a.host] || 0) + 1;\n  byAlertname[a.alertname] = (byAlertname[a.alertname] || 0) + 1;\n}\nconst topHosts = Object.entries(byHost).sort((a, b) => b[1] - a[1]).slice(0, 3)\n  .map(([h, c]) => `${h}（${c} 次）`);\nconst summary = {\n  total: alerts.length,\n  critical: bySeverity.critical || 0,\n  warning: bySeverity.warning || 0,\n  top_hosts: topHosts,\n  by_alertname: byAlertname,\n  first_alert: alerts[0]?.timestamp || null,\n  last_alert: alerts[alerts.length - 1]?.timestamp || null\n};\nreturn [{ json: { stats: summary } }];"
+      },
+      "id": "adv2-agg",
+      "name": "統計聚合",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [432, 304]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=YOUR_GEMINI_API_KEY",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { contents: [ { parts: [ { text: '你是 TSMC IT 維運部門的值班助理，負責撰寫每日維運日報。\\n\\n以下是過去 24 小時的告警統計（JSON）：\\n' + JSON.stringify($json.stats) + '\\n\\n請用繁體中文撰寫一份 markdown 格式的維運摘要日報，包含：\\n1. 總覽（一段話，含告警總數與 critical 數量）\\n2. 需要關注（列出反覆觸發或 critical 的項目，給處理建議）\\n3. 低風險項目（一句話帶過）\\n\\n直接輸出 markdown，不要 ``` 包裹。' } ] } ], generationConfig: { temperature: 0.1 } } }}",
+        "options": {}
+      },
+      "id": "adv2-gemini",
+      "name": "Gemini: 生成日報",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [656, 304]
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $json.candidates?.[0]?.content?.parts?.[0]?.text || '(Gemini 未回傳內容)';\nconst report = text.replace(/```(markdown)?\\n?|```/g, '').trim();\nconst stats = $('統計聚合').item.json.stats;\nreturn [{ json: {\n  report_date: new Date().toISOString().slice(0, 10),\n  total_alerts: stats.total,\n  critical_count: stats.critical,\n  report_markdown: report\n} }];\n// 延伸：這裡接 Send Email / Microsoft Teams / LINE Notify 節點推送日報"
+      },
+      "id": "adv2-format",
+      "name": "格式化日報",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 304]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/notify-hub",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { source: 'adv2-daily-report', severity: $json.critical_count > 0 ? 'warning' : 'info', title: '每日維運日報 ' + $json.report_date + '（告警 ' + $json.total_alerts + ' 條，critical ' + $json.critical_count + '）', message: $json.report_markdown.slice(0, 1800) } }}",
+        "options": {}
+      },
+      "id": "adv2-notify",
+      "name": "推送通知",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1104, 304]
+    }
+  ],
+  "connections": {
+    "每日 08:00": {
+      "main": [
+        [
+          { "node": "取得 24hr 告警歷史", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "取得 24hr 告警歷史": {
+      "main": [
+        [
+          { "node": "統計聚合", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "統計聚合": {
+      "main": [
+        [
+          { "node": "Gemini: 生成日報", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Gemini: 生成日報": {
+      "main": [
+        [
+          { "node": "格式化日報", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "格式化日報": {
+      "main": [
+        [
+          { "node": "推送通知", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveManualExecutions": true,
+    "executionOrder": "v1"
+  }
+}

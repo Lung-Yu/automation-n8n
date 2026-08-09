@@ -1,0 +1,199 @@
+{
+  "name": "Adv 5 - Post-Incident Report 自動生成 [事件資料 → Gemini → 標準 PIR 文件]",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Adv 5：Post-Incident Report 自動生成\n\n**情境**：事件解決後要寫事後報告（PIR），\n工程師最痛恨的文書工作，也是最常拖延的。\n\n**解法**：事件系統已有完整資料（時間軸、處置動作、影響範圍），\nAI 把結構化資料轉成標準格式的 PIR 文件。\n\n**輸入**：incident_id（POST body 或 Demo 預設 INC-2026-0703）\n**輸出**：markdown 格式 PIR（摘要/時間軸/根因/影響/改善建議）\n\n**關鍵教學點**：AI 不發明事實——所有內容來自事件系統的\n結構化資料，AI 只負責組織成人類易讀的敘事。",
+        "height": 330,
+        "width": 470
+      },
+      "id": "adv5-note",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-64, -144]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "generate-pir",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "adv5-wh",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-16, 304],
+      "webhookId": "adv5-pir-hook"
+    },
+    {
+      "parameters": {},
+      "id": "adv5-manual",
+      "name": "Demo Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-16, 512]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Demo 用事件 ID（mock API 內建 INC-2026-0703）\nreturn [{ json: { incident_id: 'INC-2026-0703' } }];"
+      },
+      "id": "adv5-demo",
+      "name": "Demo 事件",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [176, 512]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 支援 Webhook（$json.body）與 Demo 路徑（$json 直接帶 incident_id）\nconst id = $json.body?.incident_id || $json.incident_id || 'INC-2026-0703';\nreturn [{ json: { incident_id: id } }];"
+      },
+      "id": "adv5-id",
+      "name": "取得事件 ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [208, 304]
+    },
+    {
+      "parameters": {
+        "url": "=http://host.containers.internal:3001/api/incidents/{{ $json.incident_id }}",
+        "options": {}
+      },
+      "id": "adv5-fetch",
+      "name": "取得事件完整資料",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [432, 304]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 把事件資料組成 AI 易讀的文字（時間軸逐行列出）\nconst inc = $json;\nconst timeline = (inc.timeline || []).map(t => `- ${t.time}: ${t.event}`).join('\\n');\nconst actions = (inc.actions_taken || []).map((a, i) => `${i + 1}. ${a}`).join('\\n');\nconst durationMin = Math.round((new Date(inc.resolved_at) - new Date(inc.started_at)) / 60000);\nconst context = [\n  `事件編號：${inc.incident_id}`,\n  `標題：${inc.title}`,\n  `嚴重度：${inc.severity}`,\n  `持續時間：${durationMin} 分鐘（${inc.started_at} → ${inc.resolved_at}）`,\n  `受影響服務：${(inc.affected_services || []).join('、')}`,\n  `影響描述：${inc.impact}`,\n  '',\n  '時間軸：',\n  timeline,\n  '',\n  '已執行的處置動作：',\n  actions\n].join('\\n');\nreturn [{ json: { incident_id: inc.incident_id, context } }];"
+      },
+      "id": "adv5-ctx",
+      "name": "組事件上下文",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [656, 304]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=YOUR_GEMINI_API_KEY",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { contents: [ { parts: [ { text: '你是 IT 維運部門的事件管理專員，負責撰寫 Post-Incident Report（PIR，事後報告）。\\n\\n以下是事件系統匯出的完整資料：\\n---\\n' + $json.context + '\\n---\\n\\n請根據以上資料撰寫繁體中文的 PIR，markdown 格式，包含以下章節：\\n## 摘要（3 行內：發生什麼、影響多大、怎麼解決的）\\n## 時間軸（保留原始時間，濃縮成關鍵節點）\\n## 根本原因\\n## 影響範圍\\n## 改善建議（區分已完成與待辦）\\n\\n嚴格規則：只使用資料中存在的事實，不要推測或發明細節。資料中沒有的資訊寫「資料未記錄」。直接輸出 markdown，不要 ``` 包裹。' } ] } ], generationConfig: { temperature: 0.1 } } }}",
+        "options": {}
+      },
+      "id": "adv5-gemini",
+      "name": "Gemini: 生成 PIR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 304]
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $json.candidates?.[0]?.content?.parts?.[0]?.text || '(生成失敗)';\nconst pir = text.replace(/```(markdown)?\\n?|```/g, '').trim();\nreturn [{ json: {\n  incident_id: $('組事件上下文').item.json.incident_id,\n  generated_at: new Date().toISOString(),\n  pir_markdown: pir\n} }];\n// 延伸：接 HTTP Request 把 PIR 寫回事件系統，或接 Email 寄給關係人"
+      },
+      "id": "adv5-format",
+      "name": "輸出 PIR 文件",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1104, 304]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/notify-hub",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { source: 'adv5-pir', severity: 'info', title: 'PIR 已生成：' + $json.incident_id, message: $json.pir_markdown.slice(0, 1800) } }}",
+        "options": {}
+      },
+      "id": "adv5-notify",
+      "name": "推送通知",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1328, 304]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 保持 Webhook 回傳為 PIR 本體（通知結果不回傳給呼叫端）\nreturn [{ json: $('輸出 PIR 文件').item.json }];"
+      },
+      "id": "adv5-respond",
+      "name": "回應 PIR",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1552, 304]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          { "node": "取得事件 ID", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Demo Trigger": {
+      "main": [
+        [
+          { "node": "Demo 事件", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Demo 事件": {
+      "main": [
+        [
+          { "node": "取得事件 ID", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "取得事件 ID": {
+      "main": [
+        [
+          { "node": "取得事件完整資料", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "取得事件完整資料": {
+      "main": [
+        [
+          { "node": "組事件上下文", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "組事件上下文": {
+      "main": [
+        [
+          { "node": "Gemini: 生成 PIR", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Gemini: 生成 PIR": {
+      "main": [
+        [
+          { "node": "輸出 PIR 文件", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "輸出 PIR 文件": {
+      "main": [
+        [
+          { "node": "推送通知", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "推送通知": {
+      "main": [
+        [
+          { "node": "回應 PIR", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveManualExecutions": true,
+    "executionOrder": "v1"
+  }
+}

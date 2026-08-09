@@ -1,0 +1,191 @@
+{
+  "updatedAt": "2026-06-14T13:19:10.242Z",
+  "createdAt": "2026-06-14T06:12:32.334Z",
+  "id": "nRQ8hKx9gRjtawFv",
+  "name": "Demo 3 - Gemini 基礎整合 [Google Gemini Node]",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "84764279-e7e8-499e-b4c1-0cf31f77d653",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        320
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "1341939d-d725-4fd2-9498-8c5bfdd87570",
+      "name": "說明",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        60,
+        180
+      ],
+      "parameters": {
+        "color": 3,
+        "content": "## Demo 3 — Gemini 基礎整合\n\n**目的**：展示用 n8n 原生 Google Gemini Node 呼叫 Gemini，不需要手寫 HTTP Request\n\n**核心 Node**：Google Gemini（Text → Message a model）\n\n**輸出**：`$json.output` 就是 AI 回答的文字，不需要手動 parse candidates\n\n**Demo 重點**\n1. 點選 Google Gemini node 看 credential 已自動帶入\n2. Model 選 gemini-2.0-flash（最快最省）\n3. Execute workflow → 看 output 欄位"
+      }
+    },
+    {
+      "id": "748abaa7-8c59-46fe-92f0-2cb141d4e40d",
+      "name": "設定：Demo 提問",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        460,
+        320
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a019d6f1-77e9-45c8-ad80-0147e89f45ee",
+              "name": "prompt",
+              "type": "string",
+              "value": "你是 IT 維運助理。請用繁體中文說明：什麼是 BGP？用兩句話，配上一個實際維運情境。"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "ea04851c-c099-40bf-abda-99c060cb937a",
+      "name": "Gemini：生成回應",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        680,
+        320
+      ],
+      "parameters": {
+        "resource": "text",
+        "operation": "message",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.0-flash",
+          "mode": "list"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "={{ $json.prompt }}",
+              "role": "user"
+            }
+          ]
+        },
+        "simplifyOutput": true
+      },
+      "credentials": {
+        "googlePalmApi": {
+          "id": "G7B3Jkm3AiKjF1gY",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "id": "794d0e20-629f-4078-82b5-0eb9a5f2d2e7",
+      "name": "格式化輸出",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        900,
+        320
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "12708216-93d9-4c84-9bad-8c6ea80c1500",
+              "name": "問題",
+              "type": "string",
+              "value": "={{ $('設定：Demo 提問').item.json.prompt }}"
+            },
+            {
+              "id": "b0a803bc-24b9-42be-b86a-2355ea0f6619",
+              "name": "AI回答",
+              "type": "string",
+              "value": "={{ $json.output }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "設定：Demo 提問",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "設定：Demo 提問": {
+      "main": [
+        [
+          {
+            "node": "Gemini：生成回應",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini：生成回應": {
+      "main": [
+        [
+          {
+            "node": "格式化輸出",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "versionId": "233c9d36-33b5-4b65-873f-fe52ef5a745d",
+  "activeVersionId": null,
+  "versionCounter": 9,
+  "triggerCount": 0,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-06-14T06:12:32.335Z",
+      "createdAt": "2026-06-14T06:12:32.335Z",
+      "role": "workflow:owner",
+      "workflowId": "nRQ8hKx9gRjtawFv",
+      "projectId": "b7aG3BLFpa4oT4cn",
+      "project": {
+        "updatedAt": "2026-06-13T23:09:05.573Z",
+        "createdAt": "2026-06-13T23:08:40.990Z",
+        "id": "b7aG3BLFpa4oT4cn",
+        "name": "Test Lab <test@lab.local>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "b785c41d-832e-4c85-8e52-40f7e444f808"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}

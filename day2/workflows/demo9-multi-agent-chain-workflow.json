@@ -1,0 +1,252 @@
+{
+  "id": "d71d83cf-3d9c-40",
+  "name": "Demo 9 - 串接多代理 IT 事件處理 [3-Agent Chain + Gemini]",
+  "nodes": [
+    {
+      "id": "cf190647-e148-46cc-b76b-a0e56d9dcb75",
+      "name": "說明",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        60,
+        140
+      ],
+      "parameters": {
+        "color": 7,
+        "content": "## Demo 9 — 串接多代理（3-Agent Chain）\n\n三個 AI Agent 串接協作，每個有不同角色：\n\n```\n告警事件\n  → Agent A（分類師）：判斷類型與嚴重度\n  → Agent B（分析師）：深入根因分析\n  → Agent C（建議師）：具體行動計畫\n  → 整合三份報告\n```\n\n**每個 Agent 接收上個 Agent 的輸出作為 context**\n\n適用：P1 事件自動分析報告"
+      }
+    },
+    {
+      "id": "54e9466f-4178-4c56-86ac-aeb7c8fb692f",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        320
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "2ca122d0-9789-4b64-86e1-76adb82896c2",
+      "name": "設定：IT 事件輸入",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        460,
+        320
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "828d04a6-aaa2-4173-9f40-d484b316b412",
+              "name": "incident",
+              "type": "string",
+              "value": "2026-08-18 09:23:41 [CRITICAL] prod-node-03 BGP session down with peer 10.0.0.1\nInterface GigabitEthernet0/1 going down\nMultiple routes withdrawn: 192.168.10.0/24, 192.168.20.0/24\nNetwork reachability to TSMC Fab-12 affected"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "8263214d-7e35-41d9-b6cf-8c4a88325174",
+      "name": "Agent A：分類師",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        680,
+        320
+      ],
+      "parameters": {
+        "resource": "text",
+        "operation": "message",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.0-flash",
+          "mode": "list"
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "user",
+              "content": "={{ \"你是 IT 事件分類師。分析事件，只回傳 JSON（不要markdown）：\\n\" + $json.incident + \"\\n\\n格式：{\\\"type\\\": \\\"網路/系統/安全\\\", \\\"severity\\\": \\\"P1-P4\\\", \\\"affected\\\": \\\"受影響服務\\\", \\\"symptoms\\\": [\\\"症狀\\\"]}\" }}"
+            }
+          ]
+        },
+        "simplifyOutput": true
+      },
+      "credentials": {
+        "googlePalmApi": {
+          "id": "G7B3Jkm3AiKjF1gY",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "id": "a3182ed4-71bf-42ed-ac2d-515da31b55f1",
+      "name": "Agent B：分析師",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        900,
+        320
+      ],
+      "parameters": {
+        "resource": "text",
+        "operation": "message",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.0-flash",
+          "mode": "list"
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "user",
+              "content": "={{ \"你是 IT 根因分析師。\\n原始事件：\" + $('設定：IT 事件輸入').item.json.incident + \"\\n分類：\" + $json.output + \"\\n\\n分析：1.根因假說(3個) 2.影響範圍 3.緊急處置(3步)\\n繁體中文，結構清晰\" }}"
+            }
+          ]
+        },
+        "simplifyOutput": true
+      },
+      "credentials": {
+        "googlePalmApi": {
+          "id": "G7B3Jkm3AiKjF1gY",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "id": "996a2734-a330-42c2-a4cf-e2c017e3e13b",
+      "name": "Agent C：建議師",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        320
+      ],
+      "parameters": {
+        "resource": "text",
+        "operation": "message",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.0-flash",
+          "mode": "list"
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "user",
+              "content": "={{ \"你是 IT 行動計畫師。\\n根因：\" + $json.output + \"\\n\\n提供：1.立即行動(0-30min) 2.短期(1-4hr) 3.長期預防(本週) 4.Escalation\\n繁體中文，適合值班工程師執行\" }}"
+            }
+          ]
+        },
+        "simplifyOutput": true
+      },
+      "credentials": {
+        "googlePalmApi": {
+          "id": "G7B3Jkm3AiKjF1gY",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "id": "25ec8afd-c46b-484e-bdc0-2c382683c858",
+      "name": "整合：三代理分析報告",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1340,
+        320
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "bbab869d-e553-4aff-a283-37e8ce3b7b35",
+              "name": "📋 事件分類 (Agent A)",
+              "type": "string",
+              "value": "={{ $('Agent A：分類師').item.json.output }}"
+            },
+            {
+              "id": "b1b57189-424e-456f-8c29-a7643eef7a2c",
+              "name": "🔍 根因分析 (Agent B)",
+              "type": "string",
+              "value": "={{ $('Agent B：分析師').item.json.output }}"
+            },
+            {
+              "id": "ee365cba-db8d-4062-ba84-4376dcdfae6f",
+              "name": "✅ 行動計畫 (Agent C)",
+              "type": "string",
+              "value": "={{ $json.output }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "設定：IT 事件輸入",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "設定：IT 事件輸入": {
+      "main": [
+        [
+          {
+            "node": "Agent A：分類師",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent A：分類師": {
+      "main": [
+        [
+          {
+            "node": "Agent B：分析師",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent B：分析師": {
+      "main": [
+        [
+          {
+            "node": "Agent C：建議師",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent C：建議師": {
+      "main": [
+        [
+          {
+            "node": "整合：三代理分析報告",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "25264cbd-23c8-4666-a59b-f1ead724caf8"
+}

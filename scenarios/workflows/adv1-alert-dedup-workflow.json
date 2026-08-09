@@ -1,0 +1,337 @@
+{
+  "name": "Adv 1 - 語意告警去重 [Webhook + Gemini Embedding + Qdrant + Mock Ticket]",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Adv 1：語意告警去重（Semantic Alert Deduplication）\n\n**問題**：同一個問題反覆觸發告警 → 開出一堆重複 ticket\n**解法**：開票前先用 Embedding 比對語意相似度\n- 相似度 ≥ 0.90 → 視為重複，在既有 ticket 加 comment\n- 相似度 < 0.90 → 開新 ticket，並把向量存進 Qdrant\n\n**事前準備**（跑一次即可）：\n```\ncurl -X PUT http://localhost:6333/collections/alert-dedup \\\n  -H 'Content-Type: application/json' \\\n  -d '{\"vectors\": {\"size\": 768, \"distance\": \"Cosine\"}}'\n```",
+        "height": 380,
+        "width": 460
+      },
+      "id": "adv1-note",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-64, -160]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "alert-dedup",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "adv1-wh",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-16, 304],
+      "webhookId": "adv1-alert-dedup-hook"
+    },
+    {
+      "parameters": {},
+      "id": "adv1-manual",
+      "name": "Demo Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-16, 512]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Demo 用範例告警：重按一次 Execute 可測「重複告警」路徑；改 alertname/host 測新告警路徑\nreturn [{ json: {\n  alertname: 'HighCPUUsage',\n  host: 'prod-node-03',\n  severity: 'critical',\n  message: 'CPU usage at 97% (threshold: 90%)'\n} }];"
+      },
+      "id": "adv1-demo",
+      "name": "Demo 告警",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [176, 512]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 支援 Webhook（$json.body）與 Demo 路徑（$json 直接是告警）兩種輸入\nconst a = $json.body?.alertname ? $json.body : $json;\nconst alert_text = `${a.alertname} ${a.host} ${a.message}`;\nreturn [{ json: {\n  alertname: a.alertname || 'UnknownAlert',\n  host: a.host || 'unknown',\n  severity: a.severity || 'warning',\n  message: a.message || '',\n  alert_text\n} }];"
+      },
+      "id": "adv1-text",
+      "name": "組合告警文字",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [208, 304]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=YOUR_GEMINI_API_KEY",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { content: { parts: [ { text: $json.alert_text } ] } } }}",
+        "options": {}
+      },
+      "id": "adv1-embed",
+      "name": "Gemini: Embed 告警",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [432, 304]
+    },
+    {
+      "parameters": {
+        "jsCode": "const alert = $('組合告警文字').item.json;\nconst vector = $json.embedding?.values || [];\nif (vector.length !== 768) {\n  throw new Error(`Embedding 維度錯誤: ${vector.length}（預期 768）`);\n}\nreturn [{ json: { ...alert, vector } }];"
+      },
+      "id": "adv1-vec",
+      "name": "取出向量",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [656, 304]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.containers.internal:6333/collections/alert-dedup/points/search",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { vector: $json.vector, limit: 1, with_payload: true } }}",
+        "options": {}
+      },
+      "id": "adv1-search",
+      "name": "Qdrant: 搜尋相似告警",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 304]
+    },
+    {
+      "parameters": {
+        "jsCode": "const alert = $('取出向量').item.json;\nconst THRESHOLD = 0.90;  // 課堂討論點：真實 Gemini embedding 同類告警通常 > 0.95\nconst top = ($json.result || [])[0];\nconst is_duplicate = !!(top && top.score >= THRESHOLD && top.payload?.ticket_key);\nreturn [{ json: {\n  ...alert,\n  is_duplicate,\n  similarity_score: top ? Number(top.score.toFixed(4)) : null,\n  matched_ticket: is_duplicate ? top.payload.ticket_key : null,\n  matched_alert: is_duplicate ? top.payload.alert_text : null\n} }];"
+      },
+      "id": "adv1-judge",
+      "name": "判斷是否重複",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1104, 304]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "dup1",
+              "leftValue": "={{ $json.is_duplicate }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "adv1-if",
+      "name": "IF: 重複告警？",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1328, 304]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://host.containers.internal:3001/api/tickets/{{ $json.matched_ticket }}/comments",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { body: '重複告警（相似度 ' + $json.similarity_score + '）：' + $json.alert_text + '，時間 ' + $now.toISO() } }}",
+        "options": {}
+      },
+      "id": "adv1-comment",
+      "name": "Ticket: 加 Comment（不開新單）",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1552, 160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.containers.internal:3001/api/tickets",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { summary: '[' + $json.severity + '] ' + $json.alertname + ' @ ' + $json.host, description: $json.message, severity: $json.severity, labels: ['auto-created', 'dedup-checked'] } }}",
+        "options": {}
+      },
+      "id": "adv1-create",
+      "name": "Ticket: 開新單",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1552, 448]
+    },
+    {
+      "parameters": {
+        "jsCode": "const alert = $('判斷是否重複').item.json;\nconst ticket_key = $json.key || $json.ticket?.key;\nreturn [{ json: {\n  point_id: Date.now(),\n  vector: alert.vector,\n  payload: {\n    ticket_key,\n    alertname: alert.alertname,\n    host: alert.host,\n    alert_text: alert.alert_text,\n    created_at: new Date().toISOString()\n  },\n  ticket_key\n} }];"
+      },
+      "id": "adv1-point",
+      "name": "準備 Qdrant Point",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1776, 448]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "http://host.containers.internal:6333/collections/alert-dedup/points",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { points: [ { id: $json.point_id, vector: $json.vector, payload: $json.payload } ] } }}",
+        "options": {}
+      },
+      "id": "adv1-upsert",
+      "name": "Qdrant: 存入向量",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 448]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/notify-hub",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { source: 'adv1-dedup', severity: $('判斷是否重複').item.json.severity, title: '新事件開票 ' + $('準備 Qdrant Point').item.json.ticket_key, message: $('判斷是否重複').item.json.alert_text } }}",
+        "options": {}
+      },
+      "id": "adv1-notify",
+      "name": "推送通知",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2224, 448]
+    },
+    {
+      "parameters": {
+        "jsCode": "const j = $('判斷是否重複').item.json;\nconst ticket = $('準備 Qdrant Point').item.json.ticket_key;\nreturn [{ json: {\n  action: 'created_new_ticket',\n  ticket_key: ticket,\n  alertname: j.alertname,\n  host: j.host,\n  similarity_score: j.similarity_score\n} }];"
+      },
+      "id": "adv1-out-new",
+      "name": "結果：新 Ticket",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2448, 448]
+    },
+    {
+      "parameters": {
+        "jsCode": "const j = $('判斷是否重複').item.json;\nreturn [{ json: {\n  action: 'commented_existing_ticket',\n  ticket_key: j.matched_ticket,\n  alertname: j.alertname,\n  host: j.host,\n  similarity_score: j.similarity_score\n} }];"
+      },
+      "id": "adv1-out-dup",
+      "name": "結果：重複（Comment）",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1776, 160]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          { "node": "組合告警文字", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Demo Trigger": {
+      "main": [
+        [
+          { "node": "Demo 告警", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Demo 告警": {
+      "main": [
+        [
+          { "node": "組合告警文字", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "組合告警文字": {
+      "main": [
+        [
+          { "node": "Gemini: Embed 告警", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Gemini: Embed 告警": {
+      "main": [
+        [
+          { "node": "取出向量", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "取出向量": {
+      "main": [
+        [
+          { "node": "Qdrant: 搜尋相似告警", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Qdrant: 搜尋相似告警": {
+      "main": [
+        [
+          { "node": "判斷是否重複", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "判斷是否重複": {
+      "main": [
+        [
+          { "node": "IF: 重複告警？", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "IF: 重複告警？": {
+      "main": [
+        [
+          { "node": "Ticket: 加 Comment（不開新單）", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Ticket: 開新單", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Ticket: 加 Comment（不開新單）": {
+      "main": [
+        [
+          { "node": "結果：重複（Comment）", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Ticket: 開新單": {
+      "main": [
+        [
+          { "node": "準備 Qdrant Point", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "準備 Qdrant Point": {
+      "main": [
+        [
+          { "node": "Qdrant: 存入向量", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Qdrant: 存入向量": {
+      "main": [
+        [
+          { "node": "推送通知", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "推送通知": {
+      "main": [
+        [
+          { "node": "結果：新 Ticket", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveManualExecutions": true,
+    "executionOrder": "v1"
+  }
+}

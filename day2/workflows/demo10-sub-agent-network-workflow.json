@@ -1,0 +1,113 @@
+{
+  "id": "b8b927d7-f8b8-4a",
+  "name": "Sub-Agent A - 網路診斷代理 [Specialist]",
+  "nodes": [
+    {
+      "id": "1f3271ca-8253-4b69-a3af-c11c3550025b",
+      "name": "說明",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        60,
+        140
+      ],
+      "parameters": {
+        "color": 3,
+        "content": "## Sub-Agent A - 網路診斷代理 [Specialist]\n\n**角色**：你是網路診斷專家，專精 BGP/OSPF/VLAN/interface error 分析。\n\n接收 POST {\"query\":\"事件\"}\n返回 {\"analysis\":\"分析\"}\n\n被 Demo 10 Orchestrator 呼叫"
+      }
+    },
+    {
+      "id": "5ec3a617-d6fd-426f-975e-9278aa9a4c16",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        320
+      ],
+      "webhookId": "e372084e-6b9a-41db-840d-7ee33502a70f",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "e372084e-6b9a-41db-840d-7ee33502a70f",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "e02afb33-95b2-430f-9b87-378de3abaeb6",
+      "name": "Gemini：網路診斷",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        460,
+        320
+      ],
+      "parameters": {
+        "resource": "text",
+        "operation": "message",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.0-flash",
+          "mode": "list"
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "user",
+              "content": "={{ \"你是網路診斷專家，專精 BGP/OSPF/VLAN/interface error 分析。\\n\\n收到事件：\" + ($json.body?.query || $json.query || '未提供') + \"\\n\\n只回傳 JSON：{\\\"agent\\\": \\\"網路診斷\\\", \\\"findings\\\": \\\"發現的問題\\\", \\\"risk_level\\\": \\\"高/中/低\\\", \\\"recommendations\\\": [\\\"建議1\\\", \\\"建議2\\\"]}\" }}"
+            }
+          ]
+        },
+        "simplifyOutput": true
+      },
+      "credentials": {
+        "googlePalmApi": {
+          "id": "G7B3Jkm3AiKjF1gY",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "id": "42140788-cb55-4a41-ae19-3b7fc314c4c0",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        680,
+        320
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {analysis: $json.output} }}"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Gemini：網路診斷",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini：網路診斷": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "2cd5c373-9d18-4afc-acb5-572827025590"
+}

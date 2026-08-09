@@ -1,0 +1,392 @@
+{
+  "name": "Lab B2 - Hybrid RAG Query",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "rag-v11",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "node-wh",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "8bac8b80-1451-4886-a74a-18a1e2f4f43d"
+    },
+    {
+      "parameters": {
+        "jsCode": "const q = $input.item.json.question || $input.item.json.body?.question || '';\nif (!q) return [{ json: { error: 'Send: {\"question\": \"your question\"}' } }];\nconsole.log('Question:', q);\nreturn [{ json: { question: q } }];"
+      },
+      "id": "node-validate",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.containers.internal:3003/v1beta/models/text-embedding-004:embedContent?key=TEST",
+        "sendBody": true,
+        "specifyBody": "string",
+        "body": "={{ JSON.stringify({ content: { parts: [{ text: $json.question }] }, taskType: 'RETRIEVAL_QUERY' }) }}",
+        "options": {
+          "headers": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "node-embed",
+      "name": "Get Question Embedding",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const embedding = $input.item.json.embedding?.values;\nif (!embedding) throw new Error('No embedding in input — check Get Question Embedding output');\n\nconst question = $input.item.json.question;\nif (!question) throw new Error('No question in input — check Merge node');\n\nconsole.log('Question:', question, '| Embedding dims:', embedding.length);\nreturn [{ json: { question, vector: embedding, limit: 10, with_payload: true, with_vector: false } }];"
+      },
+      "id": "node-prep-dense",
+      "name": "Dense Search via HTTP",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.containers.internal:6333/collections/sop_knowledge/points/search",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { vector: $json.vector, limit: $json.limit, with_payload: $json.with_payload, with_vector: $json.with_vector } }}",
+        "options": {}
+      },
+      "id": "node-http-dense",
+      "name": "HTTP Dense Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const denseResult = $input.item.json.result || [];\nconst question = $('Dense Search via HTTP').item.json.question;\nconsole.log('Dense search returned', denseResult.length, 'results');\nif (denseResult.length > 0) {\n  const top = denseResult[0];\n  console.log('Top:', top.payload?.source, '>', top.payload?.section?.substring(0,30), 'score='+top.score?.toFixed(4));\n}\nreturn [{ json: { question, dense_result: denseResult } }];"
+      },
+      "id": "node-pass-dense2",
+      "name": "Pass Dense Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.containers.internal:6333/collections/sop_knowledge/points/scroll",
+        "sendBody": true,
+        "specifyBody": "string",
+        "body": "{\"limit\": 100, \"with_payload\": true, \"with_vector\": false}",
+        "options": {
+          "headers": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "node-scroll",
+      "name": "Scroll All Chunks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1780,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ====================================================\n// BM25 + RRF Combined\n// All data arrives via $input (from Scroll) - no cross-node refs needed\n// ====================================================\n\n// Get data from Qdrant scroll response\nconst scrollData = $input.item.json;\nconst allChunks = scrollData.result?.points || [];\n\nif (allChunks.length === 0) {\n  throw new Error('Qdrant is empty. Run Workflow 1 (Lab B2-1 RAG Index) first.');\n}\n\n// Get previously computed data (carried forward through nodes)\nconst question = $('Pass Dense Result').item.json.question;\nconst denseResult = $('Pass Dense Result').item.json.dense_result || [];\n\nconsole.log('Corpus size:', allChunks.length, 'chunks');\nconsole.log('Dense results:', denseResult.length);\n\n// ---- BM25 Parameters ----\nconst K1 = 1.2;\nconst B = 0.75;\nconst STOP = new Set(['the','a','an','is','are','was','were','what','how','do','does',\n  'of','in','to','for','on','at','with','by','and','or','not','if','it','this','that']);\n\n// ---- Tokenize ----\nfunction tokenize(text) {\n  return text.toLowerCase().split(/[\\W_]+/).filter(t => t.length >= 2 && !STOP.has(t));\n}\n\nconst qTokens = tokenize(question);\nconst avgDocLen = allChunks.reduce((s, p) => s + (p.payload.word_count || p.payload.text.split(/\\s+/).length), 0) / allChunks.length;\n\n// ---- IDF ----\nfunction idf(term) {\n  const df = allChunks.filter(p => p.payload.text.toLowerCase().includes(term)).length;\n  if (df === 0) return 0;\n  return Math.log((allChunks.length - df + 0.5) / (df + 0.5) + 1);\n}\n\n// ---- BM25 per chunk ----\nconst bm25Scored = allChunks.map(point => {\n  const docTokens = tokenize(point.payload.text);\n  const docLen = docTokens.length;\n  let score = 0;\n  const matched = [];\n  for (const term of qTokens) {\n    const tf = docTokens.filter(t => t === term).length;\n    if (tf === 0) continue;\n    const termIdf = idf(term);\n    score += termIdf * tf * (K1 + 1) / (tf + K1 * (1 - B + B * docLen / avgDocLen));\n    matched.push(term);\n  }\n  return { source: point.payload.source, section: point.payload.section, text: point.payload.text, bm25_score: score, matched };\n}).sort((a, b) => b.bm25_score - a.bm25_score);\n\nconst top10BM25 = bm25Scored.filter(r => r.bm25_score > 0).slice(0, 10);\n\nconsole.log('BM25 Top 3:');\ntop10BM25.slice(0, 3).forEach((r, i) =>\n  console.log('  [' + (i+1) + '] score=' + r.bm25_score.toFixed(3) + '  ' + r.source + ' > ' + r.section.substring(0,35) + '  terms=' + r.matched.join(','))\n);\n\n// ---- Dense ranking ----\nconst top10Dense = denseResult.map((r, i) => ({\n  rank_dense: i + 1,\n  dense_score: r.score,\n  source: r.payload.source,\n  section: r.payload.section,\n  text: r.payload.text\n}));\n\nconsole.log('Dense Top 3:');\ntop10Dense.slice(0, 3).forEach(r =>\n  console.log('  [' + r.rank_dense + '] score=' + r.dense_score.toFixed(4) + '  ' + r.source + ' > ' + r.section.substring(0,35))\n);\n\n// ---- RRF Fusion ----\nconst K = 60;\nconst rrf = {};\nconst meta = {};\n\ntop10Dense.forEach((r, i) => {\n  const key = r.source + '||' + r.section;\n  rrf[key] = (rrf[key] || 0) + 1 / (K + i + 1);\n  meta[key] = { source: r.source, section: r.section, text: r.text, dense_rank: i+1, dense_score: r.dense_score };\n});\n\ntop10BM25.forEach((r, i) => {\n  const key = r.source + '||' + r.section;\n  rrf[key] = (rrf[key] || 0) + 1 / (K + i + 1);\n  if (!meta[key]) meta[key] = { source: r.source, section: r.section, text: r.text };\n  meta[key].bm25_rank = i + 1;\n  meta[key].bm25_score = r.bm25_score;\n});\n\nconst top3 = Object.entries(rrf)\n  .map(([key, score]) => ({ ...meta[key], rrf_score: score }))\n  .sort((a, b) => b.rrf_score - a.rrf_score)\n  .slice(0, 3);\n\nconsole.log('RRF Top 3:');\ntop3.forEach((r, i) => {\n  console.log('  [' + (i+1) + '] rrf=' + r.rrf_score.toFixed(5) + '  ' + r.source + ' > ' + r.section.substring(0,35));\n  console.log('       Dense rank=' + (r.dense_rank||'-') + '  BM25 rank=' + (r.bm25_rank||'-'));\n});\n\nreturn [{ json: { question, top3, bm25_params: { K1, B } } }];"
+      },
+      "id": "node-bm25-rrf",
+      "name": "BM25 and RRF",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const { question, top3 } = $input.item.json;\n\nlet context = '';\ntop3.forEach((c, i) => {\n  context += '[Source ' + (i+1) + '] ' + c.source + ' > ' + c.section + '\\n';\n  context += c.text.substring(0, 600) + '\\n\\n';\n});\n\nconst promptText = 'You are an IT operations engineer assistant. Answer the question based ONLY on the following knowledge base excerpts. If the information is insufficient, say so explicitly.\\n\\nQuestion: ' + question + '\\n\\nKnowledge Base Excerpts:\\n' + context + '\\nPlease provide:\\n1. Direct answer (2-3 sentences)\\n2. Key steps (bullet list, max 5 points)\\n3. Source reference (document > section)';\n\nconst payload = JSON.stringify({\n  contents: [{ parts: [{ text: promptText }] }],\n  generationConfig: { temperature: 0.1, maxOutputTokens: 1024 }\n});\n\nreturn [{ json: { question, top3, gemini_payload: payload } }];"
+      },
+      "id": "node-prompt",
+      "name": "Build Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.containers.internal:3003/v1beta/models/gemini-2.0-flash:generateContent?key=TEST",
+        "sendBody": true,
+        "specifyBody": "string",
+        "body": "={{ $json.gemini_payload }}",
+        "options": {
+          "headers": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "node-generate",
+      "name": "Gemini Generate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const prevData = $('Build Prompt').item.json;\nlet answer;\n\ntry {\n  answer = $input.item.json.candidates[0].content.parts[0].text;\n} catch(e) {\n  // Fallback when no real API key\n  answer = '[Gemini API Key not set]\\n\\nSearch results (RAG retrieval completed):\\n' +\n    prevData.top3.map((c, i) => (i+1) + '. ' + c.source + ' > ' + c.section + '\\n   ' + c.text.substring(0,150) + '...').join('\\n\\n');\n}\n\nreturn [{ json: {\n  question: prevData.question,\n  answer,\n  sources: prevData.top3.map(c => ({\n    source: c.source,\n    section: c.section,\n    rrf_score: c.rrf_score.toFixed(5),\n    dense_rank: c.dense_rank || null,\n    bm25_rank: c.bm25_rank || null\n  })),\n  retrieval_strategy: 'Dense (Qdrant Cosine) + BM25 (k1=1.2, b=0.75) -> RRF (k=60)'\n} }];"
+      },
+      "id": "node-format",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2660,
+        300
+      ]
+    },
+    {
+      "id": "node-manual",
+      "name": "Demo Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -20,
+        500
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "node-set-demo",
+      "name": "Demo Question",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        500
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { question: \"什麼是 RAG？\" } }];"
+      }
+    },
+    {
+      "id": "node-merge-q",
+      "name": "Merge Embedding + Question",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        900,
+        300
+      ],
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Get Question Embedding",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Embedding + Question",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Get Question Embedding": {
+      "main": [
+        [
+          {
+            "node": "Merge Embedding + Question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scroll All Chunks": {
+      "main": [
+        [
+          {
+            "node": "BM25 and RRF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BM25 and RRF": {
+      "main": [
+        [
+          {
+            "node": "Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "Gemini Generate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Generate": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dense Search via HTTP": {
+      "main": [
+        [
+          {
+            "node": "HTTP Dense Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Dense Search": {
+      "main": [
+        [
+          {
+            "node": "Pass Dense Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pass Dense Result": {
+      "main": [
+        [
+          {
+            "node": "Scroll All Chunks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Demo Trigger": {
+      "main": [
+        [
+          {
+            "node": "Demo Question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Demo Question": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Embedding + Question": {
+      "main": [
+        [
+          {
+            "node": "Dense Search via HTTP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null
+}

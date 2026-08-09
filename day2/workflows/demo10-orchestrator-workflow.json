@@ -1,0 +1,193 @@
+{
+  "id": "625da72c-0bb3-46",
+  "name": "Demo 10 - 多代理協作系統 [Orchestrator + 3 Specialists + Gemini]",
+  "nodes": [
+    {
+      "id": "0b4fffdf-0572-4a37-a55b-7216d6b62a33",
+      "name": "說明",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        60,
+        120
+      ],
+      "parameters": {
+        "color": 2,
+        "content": "## Demo 10 — 多代理協作系統（Orchestrator Pattern）\n\n**目的**：Orchestrator 協調多個專門代理協作解決問題\n\n**架構**\n```\n使用者輸入\n  ↓\n  Orchestrator（決策大腦）\n  ├─ Tool A: 網路診斷代理\n  ├─ Tool B: 系統資源代理\n  └─ Tool C: 安全事件代理\n  ↓\n  整合發現，生成綜合報告\n```\n\n**使用前**：先啟動三個 Sub-Agent workflows（Active ON）\n\n**Demo 步驟**\n1. Open chat → 輸入 IT 事件\n2. 觀察 Orchestrator 呼叫了哪些專門代理\n3. 看最終整合報告"
+      }
+    },
+    {
+      "id": "bfb336ee-8c43-4065-a317-70127457d78f",
+      "name": "Chat Trigger",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        280,
+        320
+      ],
+      "parameters": {
+        "options": {
+          "title": "Demo 10：IT 維運多代理協作系統",
+          "inputPlaceholder": "描述 IT 問題，例如：BGP down + CPU 過高，影響 Fab-12"
+        }
+      },
+      "webhookId": "e1f10136-1dd2-4439-88fc-554d451249e5"
+    },
+    {
+      "id": "75c2f2bd-0e02-48c2-85ef-18c1c5874a98",
+      "name": "Orchestrator：任務協調器",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        500,
+        320
+      ],
+      "parameters": {
+        "agent": "toolsAgent",
+        "promptType": "define",
+        "text": "={{ $json.chatInput }}",
+        "options": {
+          "systemMessage": "你是 TSMC IT 維運多代理協作系統的 Orchestrator。\n\n三個專門代理可呼叫：\n1. 網路診斷代理：BGP/OSPF/VLAN/介面問題\n2. 系統資源代理：CPU/Memory/Disk/Process 問題\n3. 安全事件代理：異常存取/權限/安全問題\n\n策略：根據事件類型判斷要呼叫哪個代理（可多個），整合所有發現生成完整報告。\n\n語言：繁體中文"
+        }
+      }
+    },
+    {
+      "id": "039fc378-7f1b-4993-894c-f6ba8a5d1e16",
+      "name": "Google Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        380,
+        520
+      ],
+      "parameters": {
+        "modelName": "models/gemini-2.0-flash",
+        "options": {}
+      },
+      "credentials": {
+        "googlePalmApi": {
+          "id": "G7B3Jkm3AiKjF1gY",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "id": "6bf91e24-3916-41f0-9e3f-65f4cfe384a4",
+      "name": "Tool A：網路診斷代理",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        580,
+        520
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.containers.internal:5678/webhook/e372084e-6b9a-41db-840d-7ee33502a70f",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({query: $fromAI('query', '網路問題描述')}) }}",
+        "options": {}
+      },
+      "description": "呼叫網路診斷代理"
+    },
+    {
+      "id": "2e786bbf-5f6e-4777-9b6e-a7f49104d988",
+      "name": "Tool B：系統資源代理",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        780,
+        520
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.containers.internal:5678/webhook/6da079bf-6e88-4be0-b3c0-d40bcbe32de9",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({query: $fromAI('query', '系統資源問題描述')}) }}",
+        "options": {}
+      },
+      "description": "呼叫系統資源代理"
+    },
+    {
+      "id": "e88f5cf6-40d1-4eae-a2be-0cfc98c13cb8",
+      "name": "Tool C：安全事件代理",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        980,
+        520
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.containers.internal:5678/webhook/84333518-1190-490a-a000-5995866926b1",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({query: $fromAI('query', '安全事件問題描述')}) }}",
+        "options": {}
+      },
+      "description": "呼叫資安代理"
+    }
+  ],
+  "connections": {
+    "Chat Trigger": {
+      "main": [
+        [
+          {
+            "node": "Orchestrator：任務協調器",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Orchestrator：任務協調器",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool A：網路診斷代理": {
+      "ai_tool": [
+        [
+          {
+            "node": "Orchestrator：任務協調器",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool B：系統資源代理": {
+      "ai_tool": [
+        [
+          {
+            "node": "Orchestrator：任務協調器",
+            "type": "ai_tool",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Tool C：安全事件代理": {
+      "ai_tool": [
+        [
+          {
+            "node": "Orchestrator：任務協調器",
+            "type": "ai_tool",
+            "index": 2
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "3f59ef10-93a6-4264-a5de-afd3f85893bd"
+}

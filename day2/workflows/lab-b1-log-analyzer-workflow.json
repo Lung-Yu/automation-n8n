@@ -1,0 +1,371 @@
+{
+  "updatedAt": "2026-06-14T06:02:02.827Z",
+  "createdAt": "2026-06-14T05:45:37.637Z",
+  "id": "UbgPhKqEkNthtmNr",
+  "name": "Lab B1 - Log 分析助理 [Webhook + Google Gemini Node + IF + Jira]",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lab-b1-log",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "lb1-wh",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        304
+      ],
+      "webhookId": "ad873d6d-be72-4806-a278-7e2f92dcbe15"
+    },
+    {
+      "id": "lb1-gemini",
+      "name": "Gemini：分析 Log",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        464,
+        304
+      ],
+      "parameters": {
+        "resource": "text",
+        "operation": "message",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.0-flash",
+          "mode": "list"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "={{ \"你是一位 IT 維運工程師，負責分析系統 log。\\n\\n以下是一段系統 log：\\n---\\n\" + ($json.body?.log_text || $json.log_text || '') + \"\\n---\\n\\n請分析並只回傳以下 JSON（不要任何其他文字、不要 markdown ``` 包裹）：\\n{\\n  \\\"severity\\\": \\\"Critical\\\",\\n  \\\"root_cause\\\": \\\"可能原因（一行，15字以內）\\\",\\n  \\\"actions\\\": [\\\"建議動作 1\\\", \\\"建議動作 2\\\", \\\"建議動作 3\\\"]\\n}\\n\\nseverity 只能從這四個值選一個：Critical, High, Medium, Low\" }}",
+              "role": "user"
+            }
+          ]
+        },
+        "simplifyOutput": true
+      },
+      "credentials": {
+        "googlePalmApi": {
+          "id": "G7B3Jkm3AiKjF1gY",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $input.item.json.candidates?.[0]?.content?.parts?.[0]?.text || '{}';\nconst clean = text.replace(/```json\\n?|```/g, '').trim();\nlet parsed = {};\ntry { parsed = JSON.parse(clean); } catch(e) { parsed = {severity:'Medium', root_cause:'Parse error', actions: text}; }\nconst logText = $input.item.json.log_text || '';\nreturn [{ json: {\n  severity:    parsed.severity   || 'Medium',\n  root_cause:  parsed.root_cause || '',\n  actions:     parsed.actions    || '',\n  original_log: logText\n} }];"
+      },
+      "id": "lb1-parse",
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        912,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.severity }}",
+              "rightValue": "Critical",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "lb1-if",
+      "name": "IF: Critical or High?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1136,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "c2",
+              "leftValue": "={{ $json.severity }}",
+              "rightValue": "High",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "lb1-if2",
+      "name": "IF: High?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1328,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-DOMAIN.atlassian.net/rest/api/2/issue",
+        "sendBody": true,
+        "specifyBody": "string",
+        "body": "={{ JSON.stringify({ fields: { project: { key: \"IT-DEMO\" }, summary: \"[\" + $json.severity + \"] \" + $json.root_cause, description: \"**嚴重度**：\" + $json.severity + \"\\n\\n**原始 Log**：\\n```\\n\" + $json.original_log + \"\\n```\\n\\n**根本原因**：\" + $json.root_cause + \"\\n\\n**建議處置**：\\n\" + $json.actions, issuetype: { name: \"Incident\" }, priority: { name: $json.severity === \"Critical\" ? \"Critical\" : \"High\" } } }) }}",
+        "options": {}
+      },
+      "id": "lb1-jira",
+      "name": "Jira: Create Ticket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1552,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "fields": {
+          "values": [
+            {
+              "name": "action_taken"
+            },
+            {
+              "name": "reason"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "lb1-log",
+      "name": "Log: Medium/Low (No Ticket)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [
+        1504,
+        640
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "lb1-manual",
+      "name": "Demo Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -16,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: {\n  log_text: \"Jun 14 05:30:01 prod-db kernel: Out of memory: Kill process 3421 (java) score 950 or sacrifice child. Total-vm:8388608kB, anon-rss:7900000kB\"\n} }];"
+      },
+      "id": "lb1-demo",
+      "name": "Demo Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "lb1-merge",
+      "name": "Merge Log + AI Response",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        688,
+        304
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Gemini：分析 Log",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Log + AI Response",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "IF: Critical or High?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: Critical or High?": {
+      "main": [
+        [
+          {
+            "node": "Jira: Create Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF: High?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: High?": {
+      "main": [
+        [
+          {
+            "node": "Jira: Create Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log: Medium/Low (No Ticket)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Demo Trigger": {
+      "main": [
+        [
+          {
+            "node": "Demo Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Demo Log": {
+      "main": [
+        [
+          {
+            "node": "Gemini：分析 Log",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Log + AI Response",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Log + AI Response": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini：分析 Log": {
+      "main": [
+        [
+          {
+            "node": "Merge Log + AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveManualExecutions": true,
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "versionId": "7cf411e9-049c-47d9-90a7-b849349c5e8e",
+  "activeVersionId": null,
+  "versionCounter": 14,
+  "triggerCount": 1,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-06-14T05:45:37.638Z",
+      "createdAt": "2026-06-14T05:45:37.638Z",
+      "role": "workflow:owner",
+      "workflowId": "UbgPhKqEkNthtmNr",
+      "projectId": "b7aG3BLFpa4oT4cn",
+      "project": {
+        "updatedAt": "2026-06-13T23:09:05.573Z",
+        "createdAt": "2026-06-13T23:08:40.990Z",
+        "id": "b7aG3BLFpa4oT4cn",
+        "name": "Test Lab <test@lab.local>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "b785c41d-832e-4c85-8e52-40f7e444f808"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}

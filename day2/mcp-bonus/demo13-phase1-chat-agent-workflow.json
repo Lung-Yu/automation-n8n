@@ -1,0 +1,158 @@
+{
+  "name": "Demo 13 Phase1 - IT 維運 Chatbot [Chat + AI Agent + 工具呼叫]",
+  "nodes": [
+    {
+      "id": "a1b2c3d4-0001-4000-8000-000000000001",
+      "name": "說明",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [60, 160],
+      "parameters": {
+        "color": 5,
+        "content": "## Demo 13 Phase 1 — IT 維運 Chatbot\n\n**情境**：維運工程師用自然語言詢問設備狀態，AI 自動判斷是否需要開 Jira 告警單\n\n**工具**\n- Tool A：check_device_status（查設備狀態，呼叫 mock API）\n- Tool B：create_jira_ticket（開 Jira 告警單，呼叫 Jira Cloud REST API）\n\n**核心概念**：AI Agent 自己決定呼叫哪個工具（Tool Calling）\n\n**測試指令**\n- 「prod-node-03 的 CPU 怎麼樣了？」\n- 「如果 prod-node-03 超標，幫我開一張 Jira ticket」\n- 「prod-db-01 的狀態呢？」（低 CPU，AI 應不開票）\n\n**前置需求**\n- mock API Server 在 localhost:3001（見 assets/mock-api/server.js）\n- Google Gemini Credential 已設定\n- Jira HTTP Basic Auth Credential 已設定（Lab A 已建立）"
+      }
+    },
+    {
+      "id": "a1b2c3d4-0002-4000-8000-000000000002",
+      "name": "Chat Trigger",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [280, 320],
+      "parameters": {
+        "options": {
+          "title": "Demo 13：IT 維運 Chatbot",
+          "inputPlaceholder": "輸入問題，例如：prod-node-03 的 CPU 怎麼樣了？"
+        }
+      },
+      "webhookId": "demo13-chat-trigger-webhook-001"
+    },
+    {
+      "id": "a1b2c3d4-0003-4000-8000-000000000003",
+      "name": "AI Agent：維運助理",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [680, 320],
+      "parameters": {
+        "agent": "toolsAgent",
+        "promptType": "define",
+        "text": "={{ $json.chatInput }}",
+        "options": {
+          "systemMessage": "你是 TSMC IT 維運 Chatbot。你有兩個工具可以使用：\n1. check_device_status：查詢指定設備的 CPU 使用率、Memory 使用率、Network 狀態。輸入設備名稱。\n2. create_jira_ticket：在 Jira 建立 Incident 告警單。需要標題、描述、優先度。\n\n工作原則：\n- 先查設備狀態，再根據數值判斷是否需要開票\n- CPU > 90% 或 status = critical 時，主動建議開票，並詢問使用者確認\n- 使用者明確說「幫我開票」才呼叫 create_jira_ticket\n- 所有回答用繁體中文\n- 回答要簡潔，包含具體數值"
+        }
+      }
+    },
+    {
+      "id": "a1b2c3d4-0004-4000-8000-000000000004",
+      "name": "Google Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [440, 520],
+      "parameters": {
+        "modelName": "models/gemini-2.0-flash",
+        "options": {}
+      },
+      "credentials": {
+        "googlePalmApi": {
+          "id": "YOUR_GEMINI_CREDENTIAL_ID",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "id": "a1b2c3d4-0005-4000-8000-000000000005",
+      "name": "Tool A：查設備狀態",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [840, 480],
+      "description": "查詢指定設備的即時狀態，包含 CPU 使用率、Memory 使用率、Network 狀態。輸入 device_id（設備名稱）回傳健康數值。CPU > 90% 或 status=critical 表示設備異常。",
+      "parameters": {
+        "method": "GET",
+        "url": "=http://host.containers.internal:3001/api/devices/{{ $fromAI('device_id', '設備名稱，例如 prod-node-03、prod-db-01、prod-web-02') }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "a1b2c3d4-0006-4000-8000-000000000006",
+      "name": "Tool B：開 Jira 告警單",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [840, 640],
+      "description": "在 Jira 建立 Incident 告警單。只在設備狀態異常（CPU > 90% 或 status=critical）且使用者確認後才呼叫。需要提供 title（票的標題）、description（包含設備名稱和具體數值）、priority（Critical/High/Medium/Low）。",
+      "parameters": {
+        "method": "POST",
+        "url": "https://YOUR-DOMAIN.atlassian.net/rest/api/2/issue",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "string",
+        "body": "={{ JSON.stringify({ fields: { project: { key: \"IT-DEMO\" }, summary: $fromAI('title', 'Jira ticket 標題，描述設備異常問題，例如：[Critical] prod-node-03 CPU 97%'), description: $fromAI('description', '詳細描述：設備名稱、CPU/Memory 數值、影響範圍、建議動作'), issuetype: { name: \"Incident\" }, priority: { name: $fromAI('priority', '優先度，根據嚴重程度選擇：Critical（服務中斷）/ High（效能嚴重降低）/ Medium（輕微影響）/ Low（無立即影響）', 'High') } } }) }}",
+        "options": {
+          "headers": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "YOUR_JIRA_CREDENTIAL_ID",
+          "name": "Jira Basic Auth"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Chat Trigger": {
+      "main": [
+        [
+          {
+            "node": "AI Agent：維運助理",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent：維運助理",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool A：查設備狀態": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent：維運助理",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool B：開 Jira 告警單": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent：維運助理",
+            "type": "ai_tool",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

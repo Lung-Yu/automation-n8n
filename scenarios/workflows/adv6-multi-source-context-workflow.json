@@ -1,0 +1,269 @@
+{
+  "name": "Adv 6 - 多源上下文注入 [即時狀態 + 告警歷史 + Metrics 趨勢 → 單次 Gemini 綜合判斷]",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Adv 6：多源上下文注入（Multi-Source Context Injection）\n\n**Context Engineering 的核心示範**：\nAI 判斷的品質 = 你給它的上下文品質。\n\n單看 CPU 97% → 「很高，要處理」\n加上歷史告警 → 「反覆觸發，是慣犯不是偶發」\n加上 6 小時趨勢 → 「持續爬升，不會自己好」\n\n三個資料源**並行**抓取（n8n 分支），\nMerge 匯合後組成一個 prompt，一次 Gemini 呼叫做綜合判斷。\n\n**延伸**：第 4 個資料源接 Qdrant Runbook 搜尋（Lab B2 的知識庫）。",
+        "height": 330,
+        "width": 480
+      },
+      "id": "adv6-note",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-64, -144]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "multi-source-triage",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "adv6-wh",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-16, 304],
+      "webhookId": "adv6-multisource-hook"
+    },
+    {
+      "parameters": {},
+      "id": "adv6-manual",
+      "name": "Demo Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-16, 512]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Demo 用輸入：換 host 測不同設備（prod-node-01 是 healthy，risk 應為 low）\nreturn [{ json: {\n  host: 'prod-node-03',\n  question: '這台設備需要立即處理嗎？'\n} }];"
+      },
+      "id": "adv6-demo",
+      "name": "Demo 輸入",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [176, 512]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 支援 Webhook（$json.body）與 Demo 路徑（$json 直接帶 host/question）\nconst b = $json.body || $json || {};\nreturn [{ json: {\n  host: b.host || 'prod-node-03',\n  question: b.question || '這台設備需要立即處理嗎？'\n} }];"
+      },
+      "id": "adv6-input",
+      "name": "整理輸入",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [208, 304]
+    },
+    {
+      "parameters": {
+        "url": "=http://host.containers.internal:3001/api/devices/{{ $json.host }}",
+        "options": {}
+      },
+      "id": "adv6-src1",
+      "name": "來源1: 即時狀態",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [432, 96]
+    },
+    {
+      "parameters": {
+        "url": "http://host.containers.internal:3001/api/alerts/history",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "hours",
+              "value": "24"
+            },
+            {
+              "name": "host",
+              "value": "={{ $json.host }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "adv6-src2",
+      "name": "來源2: 告警歷史",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [432, 304]
+    },
+    {
+      "parameters": {
+        "url": "=http://host.containers.internal:3001/api/metrics/{{ $json.host }}",
+        "options": {}
+      },
+      "id": "adv6-src3",
+      "name": "來源3: Metrics 趨勢",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [432, 512]
+    },
+    {
+      "parameters": {
+        "mode": "append",
+        "numberInputs": 3,
+        "options": {}
+      },
+      "id": "adv6-merge",
+      "name": "Merge: 等三源到齊",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [656, 304]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge(append) 只負責「等三個分支都完成」；取值用 $('節點名') 指名拿，不怕欄位衝突\nconst input = $('整理輸入').first().json;\nconst device = $('來源1: 即時狀態').first().json;\nconst history = $('來源2: 告警歷史').first().json;\nconst metrics = $('來源3: Metrics 趨勢').first().json;\n\nconst trend = (metrics.points || [])\n  .map(p => `  ${p.timestamp.slice(11, 16)} CPU ${p.cpu}% / MEM ${p.memory}%`)\n  .join('\\n');\nconst alertLines = (history.alerts || [])\n  .map(a => `  ${a.timestamp.slice(0, 16)} [${a.severity}] ${a.alertname}: ${a.message}`)\n  .join('\\n') || '  （24 小時內無告警記錄）';\n\nconst context = [\n  `【即時狀態】host: ${device.host}，status: ${device.status}，CPU ${device.cpu}%，Memory ${device.memory}%，Disk ${device.disk}%，uptime ${device.uptime}`,\n  '',\n  `【歷史告警】過去 24 小時共 ${history.count} 條：`,\n  alertLines,\n  '',\n  '【Metrics 趨勢】過去 6 小時：',\n  trend\n].join('\\n');\nreturn [{ json: { host: input.host, question: input.question, context } }];"
+      },
+      "id": "adv6-ctx",
+      "name": "組合三源上下文",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 304]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=YOUR_GEMINI_API_KEY",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { contents: [ { parts: [ { text: '你是資深 IT 維運工程師，做跨資料源的綜合判斷。\\n\\n問題：' + $json.question + '\\n\\n以下是三個資料源的完整資訊：\\n' + $json.context + '\\n\\n請綜合三個來源做判斷（單看一個來源可能誤判：即時值高可能是偶發，要看歷史告警是否反覆、趨勢是否持續惡化）。\\n\\n請只回傳 JSON（不要 markdown 包裹）：\\n{\\n  \"assessment\": \"綜合評估（引用具體數字與趨勢）\",\\n  \"matched_runbook\": \"適用的處理程序（若有）\",\\n  \"recommendation\": \"具體建議動作\",\\n  \"risk_level\": \"high|medium|low\"\\n}' } ] } ], generationConfig: { temperature: 0.1 } } }}",
+        "options": {}
+      },
+      "id": "adv6-gemini",
+      "name": "Gemini: 綜合判斷",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1104, 304]
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $json.candidates?.[0]?.content?.parts?.[0]?.text || '{}';\nconst clean = text.replace(/```json\\n?|```/g, '').trim();\nlet parsed = {};\ntry { parsed = JSON.parse(clean); }\ncatch (e) { parsed = { assessment: text, risk_level: 'unknown' }; }\nconst src = $('組合三源上下文').item.json;\nreturn [{ json: {\n  host: src.host,\n  question: src.question,\n  assessment: parsed.assessment || '',\n  matched_runbook: parsed.matched_runbook || null,\n  recommendation: parsed.recommendation || '',\n  risk_level: parsed.risk_level || 'unknown'\n} }];"
+      },
+      "id": "adv6-out",
+      "name": "輸出綜合判斷",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1328, 304]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/notify-hub",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { source: 'adv6-multi-source', severity: $json.risk_level === 'high' ? 'critical' : 'info', title: '綜合診斷 ' + $json.host + '（risk: ' + $json.risk_level + '）', message: $json.assessment + '\\n建議：' + $json.recommendation } }}",
+        "options": {}
+      },
+      "id": "adv6-notify",
+      "name": "推送通知",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1552, 304]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 保持 Webhook 回傳為判斷結果本體\nreturn [{ json: $('輸出綜合判斷').item.json }];"
+      },
+      "id": "adv6-respond",
+      "name": "回應判斷結果",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1776, 304]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          { "node": "整理輸入", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Demo Trigger": {
+      "main": [
+        [
+          { "node": "Demo 輸入", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Demo 輸入": {
+      "main": [
+        [
+          { "node": "整理輸入", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "整理輸入": {
+      "main": [
+        [
+          { "node": "來源1: 即時狀態", "type": "main", "index": 0 },
+          { "node": "來源2: 告警歷史", "type": "main", "index": 0 },
+          { "node": "來源3: Metrics 趨勢", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "來源1: 即時狀態": {
+      "main": [
+        [
+          { "node": "Merge: 等三源到齊", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "來源2: 告警歷史": {
+      "main": [
+        [
+          { "node": "Merge: 等三源到齊", "type": "main", "index": 1 }
+        ]
+      ]
+    },
+    "來源3: Metrics 趨勢": {
+      "main": [
+        [
+          { "node": "Merge: 等三源到齊", "type": "main", "index": 2 }
+        ]
+      ]
+    },
+    "Merge: 等三源到齊": {
+      "main": [
+        [
+          { "node": "組合三源上下文", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "組合三源上下文": {
+      "main": [
+        [
+          { "node": "Gemini: 綜合判斷", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Gemini: 綜合判斷": {
+      "main": [
+        [
+          { "node": "輸出綜合判斷", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "輸出綜合判斷": {
+      "main": [
+        [
+          { "node": "推送通知", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "推送通知": {
+      "main": [
+        [
+          { "node": "回應判斷結果", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveManualExecutions": true,
+    "executionOrder": "v1"
+  }
+}

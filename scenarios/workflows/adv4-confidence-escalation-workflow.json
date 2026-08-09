@@ -1,0 +1,258 @@
+{
+  "name": "Adv 4 - AI 信心度分流 [Confidence Escalation：低信心走人工審核]",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Adv 4：AI 信心度分流（Confidence Escalation）\n\n**問題**：AI 判斷錯了誰負責？全自動開票，AI 誤判就是災難。\n**解法**：要求 AI 回報自己的信心度（0-100），\n- confidence ≥ 60 → 自動開票（AI 自主處理）\n- confidence < 60 → 開票加上 needs-human-review 標籤，人工確認\n\n**這是 Human-in-the-Loop 的最小實作**——\nAI 不確定的事，讓它說「我不確定」，而不是硬猜。",
+        "height": 280,
+        "width": 460
+      },
+      "id": "adv4-note",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-64, -96]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "confidence-triage",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "adv4-wh",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-16, 304],
+      "webhookId": "adv4-confidence-hook"
+    },
+    {
+      "parameters": {},
+      "id": "adv4-manual",
+      "name": "Demo Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-16, 512]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Demo 用範例告警：預設走高信心（自動）路徑；\n// 改成 alertname: 'UnknownAlert' 可測低信心（人工審核）路徑\nreturn [{ json: {\n  alertname: 'HighCPUUsage',\n  host: 'prod-node-03',\n  severity: 'critical',\n  message: 'CPU usage at 97% (threshold: 90%)'\n} }];"
+      },
+      "id": "adv4-demo",
+      "name": "Demo 告警",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [176, 512]
+    },
+    {
+      "parameters": {
+        "jsCode": "const a = $json.body?.alertname ? $json.body : $json;\nreturn [{ json: {\n  alertname: a.alertname || 'UnknownAlert',\n  host: a.host || 'unknown',\n  severity: a.severity || 'warning',\n  message: a.message || ''\n} }];"
+      },
+      "id": "adv4-norm",
+      "name": "整理告警",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [208, 304]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=YOUR_GEMINI_API_KEY",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { contents: [ { parts: [ { text: '你是 IT 維運分析助理。分析以下告警：\\n\\nalertname: ' + $json.alertname + '\\nhost: ' + $json.host + '\\nseverity: ' + $json.severity + '\\nmessage: ' + $json.message + '\\n\\n請只回傳 JSON（不要 markdown 包裹）：\\n{\\n  \"severity_assessment\": \"Critical|High|Medium|Low\",\\n  \"root_cause\": \"可能原因（一行）\",\\n  \"suggested_action\": \"建議動作（一行）\",\\n  \"confidence\": 0到100的整數\\n}\\n\\nconfidence 的意義：你對這個分析有多少把握。\\n- 告警類型你熟悉、資訊完整 → 高（80+）\\n- 告警類型陌生、資訊不足、需要更多上下文 → 低（50 以下）\\n誠實評估，不確定就給低分。' } ] } ], generationConfig: { temperature: 0.1 } } }}",
+        "options": {}
+      },
+      "id": "adv4-gemini",
+      "name": "Gemini: 分析 + 自評信心度",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [432, 304]
+    },
+    {
+      "parameters": {
+        "jsCode": "const alert = $('整理告警').item.json;\nconst text = $json.candidates?.[0]?.content?.parts?.[0]?.text || '{}';\nconst clean = text.replace(/```json\\n?|```/g, '').trim();\nlet parsed = {};\ntry { parsed = JSON.parse(clean); }\ncatch (e) { parsed = { severity_assessment: 'Medium', root_cause: 'AI 回應解析失敗', suggested_action: '人工檢查', confidence: 0 }; }\n// 防禦性處理：confidence 不是數字一律當 0（走人工）\nconst confidence = Number.isFinite(Number(parsed.confidence)) ? Number(parsed.confidence) : 0;\nreturn [{ json: {\n  ...alert,\n  severity_assessment: parsed.severity_assessment || 'Medium',\n  root_cause: parsed.root_cause || '',\n  suggested_action: parsed.suggested_action || '',\n  confidence\n} }];"
+      },
+      "id": "adv4-parse",
+      "name": "解析 + 防禦處理",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [656, 304]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "conf1",
+              "leftValue": "={{ $json.confidence }}",
+              "rightValue": 60,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "adv4-if",
+      "name": "IF: confidence ≥ 60？",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [880, 304]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.containers.internal:3001/api/tickets",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { summary: '[AI自動] [' + $json.severity_assessment + '] ' + $json.alertname + ' @ ' + $json.host, description: '根因：' + $json.root_cause + '\\n建議：' + $json.suggested_action + '\\nAI 信心度：' + $json.confidence, severity: $json.severity_assessment, labels: ['ai-auto-processed'] } }}",
+        "options": {}
+      },
+      "id": "adv4-auto",
+      "name": "自動開票（AI 自主）",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1104, 160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.containers.internal:3001/api/tickets",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { summary: '[待人工確認] ' + $json.alertname + ' @ ' + $json.host, description: 'AI 信心度僅 ' + $json.confidence + '/100，需人工判斷。\\n\\nAI 初步分析（僅供參考）：\\n根因：' + $json.root_cause + '\\n建議：' + $json.suggested_action, severity: $json.severity_assessment, labels: ['needs-human-review', 'low-confidence'] } }}",
+        "options": {}
+      },
+      "id": "adv4-human",
+      "name": "開票 + 人工審核標籤",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1104, 448]
+    },
+    {
+      "parameters": {
+        "jsCode": "const a = $('解析 + 防禦處理').item.json;\nreturn [{ json: {\n  route: 'auto',\n  ticket_key: $json.key || $json.ticket?.key,\n  confidence: a.confidence,\n  assessment: a.severity_assessment\n} }];"
+      },
+      "id": "adv4-out-auto",
+      "name": "結果：AI 自主處理",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1328, 160]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/notify-hub",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { source: 'adv4-confidence', severity: 'critical', title: '低信心告警待人工審核 ' + ($json.key || ''), message: $('解析 + 防禦處理').item.json.alertname + ' @ ' + $('解析 + 防禦處理').item.json.host + '\\nAI 信心度僅 ' + $('解析 + 防禦處理').item.json.confidence + '/100，請值班人員確認。' } }}",
+        "options": {}
+      },
+      "id": "adv4-notify",
+      "name": "推送通知",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1328, 448]
+    },
+    {
+      "parameters": {
+        "jsCode": "const a = $('解析 + 防禦處理').item.json;\nconst t = $('開票 + 人工審核標籤').item.json;\nreturn [{ json: {\n  route: 'human_review',\n  ticket_key: t.key || t.ticket?.key,\n  confidence: a.confidence,\n  assessment: a.severity_assessment\n} }];"
+      },
+      "id": "adv4-out-human",
+      "name": "結果：轉人工審核",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1552, 448]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          { "node": "整理告警", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Demo Trigger": {
+      "main": [
+        [
+          { "node": "Demo 告警", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Demo 告警": {
+      "main": [
+        [
+          { "node": "整理告警", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "整理告警": {
+      "main": [
+        [
+          { "node": "Gemini: 分析 + 自評信心度", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Gemini: 分析 + 自評信心度": {
+      "main": [
+        [
+          { "node": "解析 + 防禦處理", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "解析 + 防禦處理": {
+      "main": [
+        [
+          { "node": "IF: confidence ≥ 60？", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "IF: confidence ≥ 60？": {
+      "main": [
+        [
+          { "node": "自動開票（AI 自主）", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "開票 + 人工審核標籤", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "自動開票（AI 自主）": {
+      "main": [
+        [
+          { "node": "結果：AI 自主處理", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "開票 + 人工審核標籤": {
+      "main": [
+        [
+          { "node": "推送通知", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "推送通知": {
+      "main": [
+        [
+          { "node": "結果：轉人工審核", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveManualExecutions": true,
+    "executionOrder": "v1"
+  }
+}

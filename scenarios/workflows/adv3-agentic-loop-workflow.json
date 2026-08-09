@@ -1,0 +1,367 @@
+{
+  "name": "Adv 3 - Agentic Loop 迭代診斷 [手刻 ReAct：AI 自主決定查什麼、查幾次]",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Adv 3：Agentic Loop（ReAct Pattern）\n\n**跟 Demo 7 Tool Calling 的差別**：\n- Demo 7：AI 一次決定呼叫哪些工具，呼叫完就回答\n- Adv 3：AI 呼叫工具 → **看結果** → 判斷資訊夠不夠 → 不夠再查 → 夠了才回答\n\n**這就是 AI Agent 節點的內部原理**——這裡手刻出來，\n學員看懂之後再回頭看 AI Agent 節點就不是黑盒子了。\n\n**循環結構**：組 Prompt → Gemini 決策 → 執行工具 → 更新 Scratchpad → 回到組 Prompt\n**安全閥**：最多 5 次迭代，防止無限循環燒 token。",
+        "height": 330,
+        "width": 480
+      },
+      "id": "adv3-note",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-64, -128]
+    },
+    {
+      "parameters": {},
+      "id": "adv3-manual",
+      "name": "Demo Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-16, 304]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: {\n  question: 'prod-node-03 現在狀況怎麼樣？需要處理嗎？',\n  scratchpad: '',\n  iteration: 0\n} }];"
+      },
+      "id": "adv3-init",
+      "name": "初始化",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [208, 304]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Loop 入口：每次迭代都重組 prompt，帶上已蒐集的觀察結果\nconst { question, scratchpad, iteration } = $json;\nconst prompt = [\n  '你是 IT 維運診斷助理。回答問題前，你可以呼叫工具蒐集資訊。',\n  '',\n  '可用工具：',\n  '- get_device_status(host)：查詢設備即時狀態（CPU/Memory/Disk）',\n  '- get_recent_alerts()：查詢過去 24 小時告警歷史',\n  '',\n  '規則：每次只回傳一個 JSON（不要 markdown 包裹）：',\n  '需要更多資訊 → {\"action\": \"tool_call\", \"tool\": \"工具名\", \"args\": {\"host\": \"...\"}, \"thought\": \"為什麼要查\"}',\n  '資訊足夠了 → {\"action\": \"final_answer\", \"answer\": \"你的完整回答\"}',\n  '',\n  '問題：' + question,\n  scratchpad ? '\\n目前已蒐集的資訊：' + scratchpad : ''\n].join('\\n');\nreturn [{ json: { question, scratchpad, iteration, prompt } }];"
+      },
+      "id": "adv3-prompt",
+      "name": "組 ReAct Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [432, 304]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=YOUR_GEMINI_API_KEY",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { contents: [ { parts: [ { text: $json.prompt } ] } ], generationConfig: { temperature: 0.1 } } }}",
+        "options": {}
+      },
+      "id": "adv3-gemini",
+      "name": "Gemini: 決策",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [656, 304]
+    },
+    {
+      "parameters": {
+        "jsCode": "const state = $('組 ReAct Prompt').item.json;\nconst text = $json.candidates?.[0]?.content?.parts?.[0]?.text || '{}';\nconst clean = text.replace(/```json\\n?|```/g, '').trim();\nlet decision = {};\ntry { decision = JSON.parse(clean); }\ncatch (e) { decision = { action: 'final_answer', answer: 'AI 回應解析失敗：' + text }; }\nreturn [{ json: {\n  question: state.question,\n  scratchpad: state.scratchpad,\n  iteration: state.iteration,\n  action: decision.action || 'final_answer',\n  tool: decision.tool || null,\n  args: decision.args || {},\n  thought: decision.thought || null,\n  answer: decision.answer || null\n} }];"
+      },
+      "id": "adv3-parse",
+      "name": "解析決策",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 304]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "fa1",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "final_answer",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "adv3-if-final",
+      "name": "IF: 資訊足夠了？",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1104, 304]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: {\n  status: 'answered',\n  question: $json.question,\n  answer: $json.answer,\n  iterations_used: $json.iteration\n} }];"
+      },
+      "id": "adv3-answer",
+      "name": "輸出最終答案",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1328, 160]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "sw1",
+                    "leftValue": "={{ $json.tool }}",
+                    "rightValue": "get_device_status",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "device_status"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "id": "sw2",
+                    "leftValue": "={{ $json.tool }}",
+                    "rightValue": "get_recent_alerts",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "recent_alerts"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "adv3-switch",
+      "name": "Switch: 執行哪個工具",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1328, 448]
+    },
+    {
+      "parameters": {
+        "url": "=http://host.containers.internal:3001/api/devices/{{ $json.args.host || 'prod-node-03' }}",
+        "options": {}
+      },
+      "id": "adv3-tool-dev",
+      "name": "工具: 查設備狀態",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1552, 384]
+    },
+    {
+      "parameters": {
+        "url": "http://host.containers.internal:3001/api/alerts/history",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "hours",
+              "value": "24"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "adv3-tool-alerts",
+      "name": "工具: 查告警歷史",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1552, 544]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 把工具結果寫回 Scratchpad，迭代次數 +1，回到 Loop 入口\nconst decision = $('解析決策').item.json;\nconst observation = JSON.stringify($json);\nconst entry = '\\nThought: ' + (decision.thought || '') +\n  '\\nAction: ' + decision.tool + '(' + JSON.stringify(decision.args) + ')' +\n  '\\nObservation: ' + observation;\nreturn [{ json: {\n  question: decision.question,\n  scratchpad: decision.scratchpad + entry,\n  iteration: decision.iteration + 1\n} }];"
+      },
+      "id": "adv3-scratchpad",
+      "name": "更新 Scratchpad",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1776, 448]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "lim1",
+              "leftValue": "={{ $json.iteration }}",
+              "rightValue": 5,
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "adv3-if-limit",
+      "name": "IF: 未達迭代上限？",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2000, 448]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: {\n  status: 'max_iterations_reached',\n  question: $json.question,\n  answer: '已達 5 次迭代上限仍未取得足夠資訊，請人工介入。已蒐集：' + $json.scratchpad,\n  iterations_used: $json.iteration\n} }];"
+      },
+      "id": "adv3-limit-out",
+      "name": "輸出：迭代超限",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2224, 544]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:5678/webhook/notify-hub",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { source: 'adv3-agentic-loop', severity: 'critical', title: 'AI 診斷迭代超限，需人工介入', message: '問題：' + $json.question + '\\n已迭代 ' + $json.iterations_used + ' 次仍無法取得足夠資訊。' } }}",
+        "options": {}
+      },
+      "id": "adv3-notify",
+      "name": "推送通知",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2448, 544]
+    }
+  ],
+  "connections": {
+    "Demo Trigger": {
+      "main": [
+        [
+          { "node": "初始化", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "初始化": {
+      "main": [
+        [
+          { "node": "組 ReAct Prompt", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "組 ReAct Prompt": {
+      "main": [
+        [
+          { "node": "Gemini: 決策", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Gemini: 決策": {
+      "main": [
+        [
+          { "node": "解析決策", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "解析決策": {
+      "main": [
+        [
+          { "node": "IF: 資訊足夠了？", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "IF: 資訊足夠了？": {
+      "main": [
+        [
+          { "node": "輸出最終答案", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "Switch: 執行哪個工具", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Switch: 執行哪個工具": {
+      "main": [
+        [
+          { "node": "工具: 查設備狀態", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "工具: 查告警歷史", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "工具: 查設備狀態": {
+      "main": [
+        [
+          { "node": "更新 Scratchpad", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "工具: 查告警歷史": {
+      "main": [
+        [
+          { "node": "更新 Scratchpad", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "更新 Scratchpad": {
+      "main": [
+        [
+          { "node": "IF: 未達迭代上限？", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "IF: 未達迭代上限？": {
+      "main": [
+        [
+          { "node": "組 ReAct Prompt", "type": "main", "index": 0 }
+        ],
+        [
+          { "node": "輸出：迭代超限", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "輸出：迭代超限": {
+      "main": [
+        [
+          { "node": "推送通知", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveManualExecutions": true,
+    "executionOrder": "v1"
+  }
+}

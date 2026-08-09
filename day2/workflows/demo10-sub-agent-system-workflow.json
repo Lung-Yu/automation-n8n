@@ -1,0 +1,113 @@
+{
+  "id": "0d4b368f-4767-40",
+  "name": "Sub-Agent B - 系統資源代理 [Specialist]",
+  "nodes": [
+    {
+      "id": "33727df7-fbdd-458b-8e26-47ca708545e2",
+      "name": "說明",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        60,
+        140
+      ],
+      "parameters": {
+        "color": 4,
+        "content": "## Sub-Agent B - 系統資源代理 [Specialist]\n\n**角色**：你是系統資源專家，專精 CPU/Memory/Disk/Process 分析。\n\n接收 POST {\"query\":\"事件\"}\n返回 {\"analysis\":\"分析\"}\n\n被 Demo 10 Orchestrator 呼叫"
+      }
+    },
+    {
+      "id": "fc8ae563-1fe6-4a28-a3ec-74ec293adb49",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        320
+      ],
+      "webhookId": "6da079bf-6e88-4be0-b3c0-d40bcbe32de9",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "6da079bf-6e88-4be0-b3c0-d40bcbe32de9",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "1ca00612-c3c2-4d52-a1fc-7d29497e1cb1",
+      "name": "Gemini：系統資源",
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        460,
+        320
+      ],
+      "parameters": {
+        "resource": "text",
+        "operation": "message",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.0-flash",
+          "mode": "list"
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "user",
+              "content": "={{ \"你是系統資源專家，專精 CPU/Memory/Disk/Process 分析。\\n\\n收到事件：\" + ($json.body?.query || $json.query || '未提供') + \"\\n\\n只回傳 JSON：{\\\"agent\\\": \\\"系統資源\\\", \\\"findings\\\": \\\"發現的問題\\\", \\\"risk_level\\\": \\\"高/中/低\\\", \\\"recommendations\\\": [\\\"建議1\\\", \\\"建議2\\\"]}\" }}"
+            }
+          ]
+        },
+        "simplifyOutput": true
+      },
+      "credentials": {
+        "googlePalmApi": {
+          "id": "G7B3Jkm3AiKjF1gY",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "id": "9734bc1c-1829-41ec-af66-90a28f579dd1",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        680,
+        320
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {analysis: $json.output} }}"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Gemini：系統資源",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini：系統資源": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "8d7f9d8a-9ce7-40e5-98f7-9de7258c61dd"
+}

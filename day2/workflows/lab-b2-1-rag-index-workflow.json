@@ -1,0 +1,221 @@
+{
+  "updatedAt": "2026-06-14T07:22:34.710Z",
+  "createdAt": "2026-06-14T06:11:40.031Z",
+  "id": "xqr2VeQC5pec2d9t",
+  "name": "Lab B2-1 - RAG 索引建立 [Embedding + Qdrant Upsert]",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "idx-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// TSMC IT 維運 SOP + 網路維運文件\nconst docs = [\n  {\n    source: \"Network Runbook\",\n    sections: [\n      { section: \"Chapter 1: Daily Check\",\n        text: \"Morning check ping core devices. BGP neighbors Established. CPU below 70. No errored interfaces. Check SNMP traps overnight. Verify NTP sync on all devices.\" },\n      { section: \"Chapter 2: BGP Issues\",\n        text: \"BGP down internet connectivity degraded. BGP High severity notify L2 immediately. show bgp summary Idle Active. TCP 179 blocked. DO NOT clear BGP session without L2 approval. Check peer IP reachability, MD5 auth mismatch, AS number.\" },\n      { section: \"Chapter 2: OSPF Issues\",\n        text: \"OSPF neighbor down routing instability. show ip ospf neighbor. Check hello interval mismatch, area mismatch, MTU mismatch. OSPF DR/BDR election storm. Dead interval 40s default. Verify loopback reachability.\" },\n      { section: \"Chapter 3: Maintenance\",\n        text: \"Pre-maintenance checklist change approved maintenance window rollback plan. Interface bounce shutdown 10 seconds. Never restart both core switches simultaneously. Notify NOC before maintenance. Take config backup. Test rollback path.\" },\n      { section: \"Chapter 4: Interface Errors\",\n        text: \"CRC errors physical layer problem check cable SFP. Input errors duplex mismatch. Output drops QoS congestion. show interface counters errors. High error rate >100 pps escalate. Replace SFP if persistent errors. Check fiber connector cleanliness.\" },\n      { section: \"Chapter 4: Packet Loss\",\n        text: \"Packet loss symptoms latency spike application timeout. ping continuous test. traceroute identify hop. QoS policy misconfiguration drops high priority. Buffer exhaustion high utilization >85%. MTU black hole path MTU discovery.\" },\n      { section: \"Chapter 5: VLAN Issues\",\n        text: \"VLAN mismatch trunk port access port. show vlan brief show interface trunk. Native VLAN mismatch CDP syslog warning. STP topology change VLAN convergence. Verify VLAN allowed on trunk. Check 802.1Q tagging end-to-end.\" },\n      { section: \"Chapter 5: LACP Link Aggregation\",\n        text: \"LACP port-channel down member port failure. show etherchannel summary. Min-links threshold not met. LACP PDU timeout partner system mismatch. Load balancing algorithm asymmetric traffic. Verify speed duplex match on all members.\" },\n      { section: \"Chapter 2: Bandwidth\",\n        text: \"Bandwidth congestion slow network packet loss high utilization. Over 80% congestion risk. CRC errors physical layer problem. Top talkers netflow analysis. QoS marking reclassification.\" },\n      { section: \"Chapter 6: DNS Issues\",\n        text: \"DNS resolution failure application connectivity. nslookup dig test. DNS server unreachable check UDP 53. Stale cache TTL issue flush resolver. DNSSEC validation failure. Split-DNS internal external zone mismatch.\" },\n      { section: \"Chapter 6: Firewall ACL\",\n        text: \"Connectivity blocked ACL deny log. show access-list hit count. ICMP blocked troubleshooting impact. Stateful firewall asymmetric routing drops. Implicit deny at end of ACL. Temporary permit for troubleshooting requires change ticket.\" }\n    ]\n  },\n  {\n    source: \"IT SOP\",\n    sections: [\n      { section: \"Section 2: Severity Classification\",\n        text: \"Critical response SLA 15 minutes 4 hours. High 30 minutes 8 hours. Medium 2 hours 48 hours. Low 8 hours 5 days. CPU 95 Critical. Memory 90 High. Disk 85 Medium. BGP down Critical. OSPF instability High.\" },\n      { section: \"Section 3: Incident Response\",\n        text: \"Critical incidents notify on-call manager via phone. High incidents notify team lead messaging. Check monitoring dashboards Grafana Zabbix. Create incident ticket immediately. Timeline documentation every 30 minutes.\" },\n      { section: \"Section 3.3: Escalation\",\n        text: \"L1 to L2 escalate if not resolved 30 minutes. L2 to L3 Critical 2 hours escalate department head. L3 Vendor contact TAC case. Network vendor Cisco TAC 1-800-553-2447. Always have case number before escalating.\" },\n      { section: \"Section 6: High CPU\",\n        text: \"High CPU use top htop identify process. Check expected batch job. Capture lsof strace. Check deployments. DO NOT kill process without understanding. Control plane CPU routing protocol vs data plane CPU forwarding.\" },\n      { section: \"Section 6: Memory OOM\",\n        text: \"OOM dmesg grep OOM killer. Identify killed process restart. Memory leak gradual increase days. JVM heap misconfiguration. Network device memory OSPF large LSDB BGP full table 800MB.\" },\n      { section: \"Section 7: SNMP Monitoring\",\n        text: \"SNMP v3 authPriv required no v1 v2c in production. OID ifOperStatus 1 up 2 down. Trap receiver redundant two servers. SNMP walk verify reachability. Community string rotation every 90 days. MIB compilation device-specific.\" },\n      { section: \"Section 8: NTP Synchronization\",\n        text: \"NTP stratum 2 source GPS reference. show ntp status stratum offset. Offset >128ms alert. NTP authentication MD5. All devices sync to internal NTP hierarchy. Logs timestamp accuracy compliance requirement.\" }\n    ]\n  }\n];\n\nconst items = [];\nlet id = 1;\nfor (const doc of docs) {\n  for (const sec of doc.sections) {\n    items.push({ json: { id, source: doc.source, section: sec.section,\n      text: sec.text, word_count: sec.text.split(/\\s+/).length } });\n    id++;\n  }\n}\nconsole.log('Total chunks:', items.length);\nreturn items;"
+      },
+      "id": "idx-docs",
+      "name": "Load SOP Documents",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        464,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.containers.internal:3003/v1beta/models/text-embedding-004:embedContent?key=TEST",
+        "sendBody": true,
+        "specifyBody": "string",
+        "body": "={{ JSON.stringify({ content: { parts: [{ text: $json.text }] }, taskType: \"RETRIEVAL_DOCUMENT\" }) }}",
+        "options": {}
+      },
+      "id": "idx-embed",
+      "name": "Get Chunk Embedding",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        688,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "idx-merge",
+      "name": "Merge Chunk + Embedding",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        912,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const item = $input.item.json;\nif (!item.embedding?.values || item.embedding.values.length !== 768) {\n  throw new Error('Invalid vector: ' + (item.embedding?.values?.length || 0) + ' dims');\n}\nconsole.log('Prepping id=' + item.id + ' ' + item.source + ' > ' + item.section);\nreturn { json: {\n  chunk_id:    item.id,\n  vector:      item.embedding.values,\n  source:      item.source,\n  section:     item.section,\n  text:        item.text,\n  word_count:  item.word_count\n} };"
+      },
+      "id": "idx-upsert",
+      "name": "Prep Qdrant Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "console.log('Upserted:', $input.item.json.result?.status || 'ok');\nreturn [{ json: { status: 'indexed', result: $input.item.json } }];"
+      },
+      "id": "idx-done",
+      "name": "Log Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1456,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "http://host.containers.internal:6333/collections/sop_knowledge/points",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { batch: { ids: [$json.chunk_id], vectors: [$json.vector], payloads: [{ source: $json.source, section: $json.section, text: $json.text, word_count: $json.word_count }] } } }}",
+        "options": {}
+      },
+      "id": "idx-http",
+      "name": "Qdrant Upsert HTTP",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1296,
+        304
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Load SOP Documents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load SOP Documents": {
+      "main": [
+        [
+          {
+            "node": "Get Chunk Embedding",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Chunk + Embedding",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Get Chunk Embedding": {
+      "main": [
+        [
+          {
+            "node": "Merge Chunk + Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Chunk + Embedding": {
+      "main": [
+        [
+          {
+            "node": "Prep Qdrant Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Qdrant Body": {
+      "main": [
+        [
+          {
+            "node": "Qdrant Upsert HTTP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qdrant Upsert HTTP": {
+      "main": [
+        [
+          {
+            "node": "Log Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "versionId": "48c46d9c-3ae7-40dc-8b97-0d106c12e6d4",
+  "activeVersionId": null,
+  "versionCounter": 12,
+  "triggerCount": 0,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-06-14T06:11:40.033Z",
+      "createdAt": "2026-06-14T06:11:40.033Z",
+      "role": "workflow:owner",
+      "workflowId": "xqr2VeQC5pec2d9t",
+      "projectId": "b7aG3BLFpa4oT4cn",
+      "project": {
+        "updatedAt": "2026-06-13T23:09:05.573Z",
+        "createdAt": "2026-06-13T23:08:40.990Z",
+        "id": "b7aG3BLFpa4oT4cn",
+        "name": "Test Lab <test@lab.local>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "b785c41d-832e-4c85-8e52-40f7e444f808"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}

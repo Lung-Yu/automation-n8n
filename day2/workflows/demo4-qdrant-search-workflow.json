@@ -1,0 +1,202 @@
+{
+  "updatedAt": "2026-06-14T06:30:39.665Z",
+  "createdAt": "2026-06-14T06:12:32.371Z",
+  "id": "jxnuAMEcuOxUat94",
+  "name": "Demo 4 - Qdrant 向量搜尋 [Embedding + Vector DB]",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "q1-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "q1-q",
+      "name": "Demo Question",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ],
+      "parameters": {
+        "jsCode": "return [{ json: { question: 'BGP neighbor down 如何處理？' } }];"
+      }
+    },
+    {
+      "id": "q1-embed",
+      "name": "Get Embedding",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.containers.internal:3003/v1beta/models/text-embedding-004:embedContent?key=TEST",
+        "sendBody": true,
+        "specifyBody": "string",
+        "body": "={{ JSON.stringify({ content: { parts: [{ text: $json.question }] }, taskType: \"RETRIEVAL_QUERY\" }) }}",
+        "options": {
+          "headers": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "q1-merge",
+      "name": "Merge Q + Embedding",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        900,
+        300
+      ],
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      }
+    },
+    {
+      "id": "q1-search",
+      "name": "Qdrant: Dense Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.containers.internal:6333/collections/sop_knowledge/points/search",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { vector: $json.embedding.values, limit: 3, with_payload: true } }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "q1-show",
+      "name": "Code: Show Top 3",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const results = $input.item.json.result || [];\nconst question = $('Demo Question').item.json.question;\nconsole.log('Question:', question);\nresults.forEach((r, i) => {\n  console.log(`[${i+1}] score=${r.score.toFixed(4)} ${r.payload.source} > ${r.payload.section}`);\n  console.log(`     ${r.payload.text.slice(0,60)}...`);\n});\nreturn [{ json: { question, top3: results.map(r => ({\n  score: r.score.toFixed(4),\n  source: r.payload.source,\n  section: r.payload.section,\n  text: r.payload.text\n})) }}];"
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Demo Question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Demo Question": {
+      "main": [
+        [
+          {
+            "node": "Get Embedding",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge Q + Embedding",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Get Embedding": {
+      "main": [
+        [
+          {
+            "node": "Merge Q + Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Q + Embedding": {
+      "main": [
+        [
+          {
+            "node": "Qdrant: Dense Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qdrant: Dense Search": {
+      "main": [
+        [
+          {
+            "node": "Code: Show Top 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "ed3fcd8e-905e-41b2-a2e4-62adac2a53b3",
+  "activeVersionId": null,
+  "versionCounter": 3,
+  "triggerCount": 0,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-06-14T06:12:32.372Z",
+      "createdAt": "2026-06-14T06:12:32.372Z",
+      "role": "workflow:owner",
+      "workflowId": "jxnuAMEcuOxUat94",
+      "projectId": "b7aG3BLFpa4oT4cn",
+      "project": {
+        "updatedAt": "2026-06-13T23:09:05.573Z",
+        "createdAt": "2026-06-13T23:08:40.990Z",
+        "id": "b7aG3BLFpa4oT4cn",
+        "name": "Test Lab <test@lab.local>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "b785c41d-832e-4c85-8e52-40f7e444f808"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}

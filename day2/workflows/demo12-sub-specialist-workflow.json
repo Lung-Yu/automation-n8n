@@ -1,0 +1,95 @@
+{
+  "name": "Demo 12 - 專家分析子代理 [Sub-Workflow Specialist]",
+  "nodes": [
+    {
+      "id": "9801ccc0-4ea6-4534-b832-308de5391b96",
+      "name": "說明",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        220,
+        160
+      ],
+      "parameters": {
+        "content": "## Demo 12 子代理：專家分析師\n\n**用途**：被主工作流呼叫（Execute Workflow）\n\n**輸入**（由主工作流傳入）：\n- `domain`：分析領域（security/performance/capacity）\n- `data`：本週事件資料（JSON 字串）\n- `role`：角色描述\n\n**輸出**：該領域的分析報告（Markdown 格式）\n\n⚠️ 此工作流不需手動執行，由 Demo 12 主流程呼叫",
+        "height": 260,
+        "width": 380,
+        "color": 7
+      },
+      "typeVersion": 1
+    },
+    {
+      "id": "ae75e151-a810-4972-b0b5-9a51a9e922bf",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "position": [
+        660,
+        360
+      ],
+      "parameters": {},
+      "typeVersion": 1
+    },
+    {
+      "id": "750aeb5d-dada-40ff-ada8-a76090d8c453",
+      "name": "AI Agent：專家分析師",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "position": [
+        900,
+        360
+      ],
+      "parameters": {
+        "systemMessage": "={{ '你是 ' + $json.role + '。請根據以下本週 IT 事件資料，從「' + $json.domain + '」的專業角度進行分析，產出一份簡潔的分析報告（Markdown 格式，200字以內）。\\n\\n分析重點：\\n1. 本週主要發現（2-3 點）\\n2. 風險評估（低/中/高）\\n3. 下週行動建議（1-2 點）\\n\\n事件資料：\\n' + $json.data }}",
+        "promptType": "define",
+        "text": "請根據系統提示中的事件資料進行分析。"
+      },
+      "typeVersion": 1.7
+    },
+    {
+      "id": "5ebfb0a6-0a1a-48ae-b27e-d7707458b9d5",
+      "name": "Google Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "position": [
+        900,
+        540
+      ],
+      "parameters": {
+        "modelName": "models/gemini-1.5-flash",
+        "options": {}
+      },
+      "credentials": {
+        "googlePalmApi": {
+          "id": "G7B3Jkm3AiKjF1gY",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      },
+      "typeVersion": 1
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "AI Agent：專家分析師",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent：專家分析師": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Google Gemini Chat Model",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

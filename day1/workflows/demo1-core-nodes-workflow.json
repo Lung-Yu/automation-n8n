@@ -1,0 +1,283 @@
+{
+  "updatedAt": "2026-06-14T06:38:16.560Z",
+  "createdAt": "2026-06-14T06:12:32.229Z",
+  "id": "DwlrvyHhh4TidZpZ",
+  "name": "Demo 1 - 核心節點操作 [Webhook + Set + IF + Code + HTTP]",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "d1-wh",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "demo-core",
+        "options": {}
+      },
+      "webhookId": "551c9d42-39c2-45fe-b53c-9705fbdbb2fb"
+    },
+    {
+      "id": "d1-set",
+      "name": "Set: 整理欄位",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [
+        460,
+        300
+      ],
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "fields": {
+          "values": [
+            {
+              "name": "name",
+              "type": "stringValue",
+              "value": "={{ $json.body?.name    || $json.name    || 'Anonymous' }}"
+            },
+            {
+              "name": "severity",
+              "type": "stringValue",
+              "value": "={{ $json.body?.severity || $json.severity || 'low' }}"
+            },
+            {
+              "name": "source",
+              "type": "stringValue",
+              "value": "={{ $json.body?.source   || $json.source   || 'unknown' }}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "d1-if",
+      "name": "IF: severity == critical?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.severity }}",
+              "rightValue": "critical",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and",
+          "options": {}
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d1-code-high",
+      "name": "Code: 高優先處理",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        200
+      ],
+      "parameters": {
+        "jsCode": "// True 路徑 — 緊急處理\nreturn [{ json: {\n  ...$input.item.json,\n  action: 'ESCALATE',\n  message: '🚨 Critical: ' + $json.name + ' requires immediate attention',\n  timestamp: new Date().toISOString()\n}}];"
+      }
+    },
+    {
+      "id": "d1-code-low",
+      "name": "Code: 一般記錄",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        440
+      ],
+      "parameters": {
+        "jsCode": "// False 路徑 — 一般記錄\nreturn [{ json: {\n  ...$input.item.json,\n  action: 'LOG',\n  message: 'ℹ️ ' + $json.name + ' logged at ' + $json.severity,\n  timestamp: new Date().toISOString()\n}}];"
+      }
+    },
+    {
+      "id": "d1-http",
+      "name": "HTTP Request: 送出通知",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.containers.internal:3003/v1beta/models/gemini-2.0-flash:generateContent?key=TEST",
+        "sendBody": true,
+        "specifyBody": "string",
+        "body": "={{ JSON.stringify({ contents: [{ parts: [{ text: \"Summarize this action in one sentence: \" + $json.action + \" - \" + $json.message }] }] }) }}",
+        "options": {
+          "headers": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "d1-manual",
+      "name": "Demo Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -20,
+        500
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "d1-demo-payload",
+      "name": "Demo Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        500
+      ],
+      "parameters": {
+        "jsCode": "// 課堂示範用 payload（模擬 critical 告警）\nreturn [{ json: {\n  name:     \"HighCPU\",\n  severity: \"critical\",\n  source:   \"monitoring-agent\"\n} }];"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Set: 整理欄位",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set: 整理欄位": {
+      "main": [
+        [
+          {
+            "node": "IF: severity == critical?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF: severity == critical?": {
+      "main": [
+        [
+          {
+            "node": "Code: 高優先處理",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code: 一般記錄",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: 高優先處理": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request: 送出通知",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: 一般記錄": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request: 送出通知",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Demo Trigger": {
+      "main": [
+        [
+          {
+            "node": "Demo Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Demo Payload": {
+      "main": [
+        [
+          {
+            "node": "Set: 整理欄位",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "ba10bb71-c749-4a74-b420-17a607d34244",
+  "activeVersionId": null,
+  "versionCounter": 5,
+  "triggerCount": 1,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-06-14T06:12:32.230Z",
+      "createdAt": "2026-06-14T06:12:32.230Z",
+      "role": "workflow:owner",
+      "workflowId": "DwlrvyHhh4TidZpZ",
+      "projectId": "b7aG3BLFpa4oT4cn",
+      "project": {
+        "updatedAt": "2026-06-13T23:09:05.573Z",
+        "createdAt": "2026-06-13T23:08:40.990Z",
+        "id": "b7aG3BLFpa4oT4cn",
+        "name": "Test Lab <test@lab.local>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "b785c41d-832e-4c85-8e52-40f7e444f808"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}
