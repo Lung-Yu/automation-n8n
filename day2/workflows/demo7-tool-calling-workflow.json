@@ -1,10 +1,10 @@
 {
-  "updatedAt": "2026-06-14T07:03:38.468Z",
+  "updatedAt": "2026-08-20T18:01:55.000Z",
   "createdAt": "2026-06-14T07:03:38.468Z",
   "id": "F2j40ICElLMQXgcI",
   "name": "Demo 7 - 工具呼叫 [AI Agent + Tools + Gemini]",
   "description": null,
-  "active": false,
+  "active": true,
   "isArchived": false,
   "nodes": [
     {
@@ -88,15 +88,15 @@
       },
       "credentials": {
         "googlePalmApi": {
-          "id": "G7B3Jkm3AiKjF1gY",
+          "id": "y5KQga469O9gMXCo",
           "name": "Google Gemini(PaLM) Api account"
         }
       }
     },
     {
       "id": "31e171c1-d7f9-42a6-9b0f-6fdc9f716068",
-      "name": "Tool：查設備狀態",
-      "type": "n8n-nodes-base.httpRequest",
+      "name": "get_device_status",
+      "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.2,
       "position": [
         760,
@@ -105,14 +105,14 @@
       "parameters": {
         "method": "GET",
         "url": "=http://host.containers.internal:3001/api/devices/{{ $fromAI('device_name', '設備名稱，例如 prod-node-03') }}",
-        "options": {}
-      },
-      "description": "查詢指定設備的 CPU、Memory、Network 即時狀態"
+        "options": {},
+        "toolDescription": "查詢指定設備的 CPU、Memory、Network 即時狀態"
+      }
     },
     {
       "id": "7b50f595-f7af-4821-96c9-e148d5af11f2",
-      "name": "Tool：查告警歷史",
-      "type": "n8n-nodes-base.httpRequest",
+      "name": "get_alert_history",
+      "type": "n8n-nodes-base.httpRequestTool",
       "typeVersion": 4.2,
       "position": [
         960,
@@ -121,9 +121,9 @@
       "parameters": {
         "method": "GET",
         "url": "=http://host.containers.internal:3001/api/alerts",
-        "options": {}
-      },
-      "description": "查詢指定設備或等級的告警歷史記錄"
+        "options": {},
+        "toolDescription": "查詢指定設備或等級的告警歷史記錄"
+      }
     }
   ],
   "connections": {
@@ -160,7 +160,7 @@
         ]
       ]
     },
-    "Tool：查設備狀態": {
+    "get_device_status": {
       "ai_tool": [
         [
           {
@@ -171,7 +171,7 @@
         ]
       ]
     },
-    "Tool：查告警歷史": {
+    "get_alert_history": {
       "ai_tool": [
         [
           {
@@ -189,27 +189,27 @@
   "staticData": null,
   "meta": null,
   "pinData": null,
-  "versionId": "9c39ef28-5149-435f-87d7-971cdea9f57b",
-  "activeVersionId": null,
-  "versionCounter": 5,
+  "versionId": "cacca66e-3297-4e66-bd9f-f20ab9525a4b",
+  "activeVersionId": "cacca66e-3297-4e66-bd9f-f20ab9525a4b",
+  "versionCounter": 11,
   "triggerCount": 1,
   "tags": [],
   "shared": [
     {
-      "updatedAt": "2026-06-14T07:03:38.470Z",
-      "createdAt": "2026-06-14T07:03:38.470Z",
+      "updatedAt": "2026-08-09T04:20:39.336Z",
+      "createdAt": "2026-08-09T04:20:39.336Z",
       "role": "workflow:owner",
       "workflowId": "F2j40ICElLMQXgcI",
-      "projectId": "b7aG3BLFpa4oT4cn",
+      "projectId": "iFSWiDfw3HA0bpAB",
       "project": {
-        "updatedAt": "2026-06-13T23:09:05.573Z",
-        "createdAt": "2026-06-13T23:08:40.990Z",
-        "id": "b7aG3BLFpa4oT4cn",
-        "name": "Test Lab <test@lab.local>",
+        "updatedAt": "2026-08-09T04:15:47.208Z",
+        "createdAt": "2026-08-09T04:14:06.896Z",
+        "id": "iFSWiDfw3HA0bpAB",
+        "name": "Tygrus Course <tygrus@example.com>",
         "type": "personal",
         "icon": null,
         "description": null,
-        "creatorId": "b785c41d-832e-4c85-8e52-40f7e444f808"
+        "creatorId": "899ae217-0da7-485b-843b-c540e0928eb8"
       }
     }
   ],

@@ -1,5 +1,11 @@
 {
+  "updatedAt": "2026-08-20T18:02:01.000Z",
+  "createdAt": "2026-08-09T05:08:23.393Z",
+  "id": "5DXoxtsRTfrjOk8Z",
   "name": "Demo 11 - 多工具 IT 故障診斷代理 [AI Agent + 4 Tools + Gemini]",
+  "description": null,
+  "active": true,
+  "isArchived": false,
   "nodes": [
     {
       "id": "c0842833-3aef-46ef-ae22-dd52891de3b2",
@@ -120,12 +126,12 @@
         580
       ],
       "parameters": {
-        "modelName": "models/gemini-1.5-flash",
+        "modelName": "models/gemini-2.5-flash",
         "options": {}
       },
       "credentials": {
         "googlePalmApi": {
-          "id": "G7B3Jkm3AiKjF1gY",
+          "id": "y5KQga469O9gMXCo",
           "name": "Google Gemini(PaLM) Api account"
         }
       },
@@ -144,41 +150,55 @@
         ]
       ]
     },
-    "AI Agent：IT SRE 助理": {
+    "Tool：get_metrics": {
       "ai_tool": [
         [
           {
-            "node": "Tool：get_metrics",
-            "type": "ai_tool",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Tool：search_logs",
-            "type": "ai_tool",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Tool：lookup_runbook",
-            "type": "ai_tool",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Tool：create_incident",
+            "node": "AI Agent：IT SRE 助理",
             "type": "ai_tool",
             "index": 0
           }
         ]
-      ],
+      ]
+    },
+    "Tool：search_logs": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent：IT SRE 助理",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool：lookup_runbook": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent：IT SRE 助理",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tool：create_incident": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent：IT SRE 助理",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
       "ai_languageModel": [
         [
           {
-            "node": "Google Gemini Chat Model",
+            "node": "AI Agent：IT SRE 助理",
             "type": "ai_languageModel",
             "index": 0
           }
@@ -189,5 +209,35 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "pinData": {}
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "versionId": "5275c967-1666-47bb-986e-6151ec871376",
+  "activeVersionId": "5275c967-1666-47bb-986e-6151ec871376",
+  "versionCounter": 7,
+  "triggerCount": 1,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-08-09T05:08:23.394Z",
+      "createdAt": "2026-08-09T05:08:23.394Z",
+      "role": "workflow:owner",
+      "workflowId": "5DXoxtsRTfrjOk8Z",
+      "projectId": "iFSWiDfw3HA0bpAB",
+      "project": {
+        "updatedAt": "2026-08-09T04:15:47.208Z",
+        "createdAt": "2026-08-09T04:14:06.896Z",
+        "id": "iFSWiDfw3HA0bpAB",
+        "name": "Tygrus Course <tygrus@example.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "899ae217-0da7-485b-843b-c540e0928eb8"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
 }

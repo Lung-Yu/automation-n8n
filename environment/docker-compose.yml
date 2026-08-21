@@ -49,6 +49,25 @@ services:
     networks:
       - lab-network
 
+  # Qdrant collection 初始化（一次性；建 sop_knowledge + alert-dedup，PUT 冪等可重跑）
+  # 沒有這步，Demo 4 / Demo 8 / Lab B2 / Adv 1 全部會 404 Collection doesn't exist
+  qdrant-init:
+    image: curlimages/curl:latest
+    container_name: qdrant-init
+    depends_on:
+      - qdrant
+    restart: "no"
+    command: >
+      sh -c "sleep 3
+      && curl -s -X PUT http://qdrant:6333/collections/sop_knowledge
+      -H 'Content-Type: application/json'
+      -d '{\"vectors\":{\"size\":768,\"distance\":\"Cosine\"}}'
+      && curl -s -X PUT http://qdrant:6333/collections/alert-dedup
+      -H 'Content-Type: application/json'
+      -d '{\"vectors\":{\"size\":768,\"distance\":\"Cosine\"}}'"
+    networks:
+      - lab-network
+
   # Mock API Server（設備狀態/告警/工單/事件，workflow 全部寫死呼叫 3001）
   mock-api:
     image: node:20-alpine

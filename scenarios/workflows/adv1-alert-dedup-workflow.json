@@ -1,5 +1,11 @@
 {
+  "updatedAt": "2026-08-20T18:11:06.000Z",
+  "createdAt": "2026-08-09T05:08:23.383Z",
+  "id": "8zryoiAZB4rjeYx9",
   "name": "Adv 1 - 語意告警去重 [Webhook + Gemini Embedding + Qdrant + Mock Ticket]",
+  "description": null,
+  "active": true,
+  "isArchived": false,
   "nodes": [
     {
       "parameters": {
@@ -11,12 +17,15 @@
       "name": "Sticky Note",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [-64, -160]
+      "position": [
+        -64,
+        -160
+      ]
     },
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "alert-dedup",
+        "path": "alert-dedup-semantic",
         "responseMode": "lastNode",
         "options": {}
       },
@@ -24,7 +33,10 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [-16, 304],
+      "position": [
+        -16,
+        304
+      ],
       "webhookId": "adv1-alert-dedup-hook"
     },
     {
@@ -33,7 +45,10 @@
       "name": "Demo Trigger",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [-16, 512]
+      "position": [
+        -16,
+        512
+      ]
     },
     {
       "parameters": {
@@ -43,7 +58,10 @@
       "name": "Demo 告警",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [176, 512]
+      "position": [
+        176,
+        512
+      ]
     },
     {
       "parameters": {
@@ -53,22 +71,28 @@
       "name": "組合告警文字",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [208, 304]
+      "position": [
+        208,
+        304
+      ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=YOUR_GEMINI_API_KEY",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=AQ.Ab8RN6JscuXFa5La2HCYbgE1jpE8w8kCRQ6YjbAaZ69f7pcUeA",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { content: { parts: [ { text: $json.alert_text } ] } } }}",
+        "jsonBody": "={{ { content: { parts: [ { text: $json.alert_text } ] }, outputDimensionality: 768 } }}",
         "options": {}
       },
       "id": "adv1-embed",
       "name": "Gemini: Embed 告警",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [432, 304]
+      "position": [
+        432,
+        304
+      ]
     },
     {
       "parameters": {
@@ -78,7 +102,10 @@
       "name": "取出向量",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [656, 304]
+      "position": [
+        656,
+        304
+      ]
     },
     {
       "parameters": {
@@ -93,7 +120,10 @@
       "name": "Qdrant: 搜尋相似告警",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [880, 304]
+      "position": [
+        880,
+        304
+      ]
     },
     {
       "parameters": {
@@ -103,7 +133,10 @@
       "name": "判斷是否重複",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1104, 304]
+      "position": [
+        1104,
+        304
+      ]
     },
     {
       "parameters": {
@@ -134,7 +167,10 @@
       "name": "IF: 重複告警？",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1328, 304]
+      "position": [
+        1328,
+        304
+      ]
     },
     {
       "parameters": {
@@ -149,7 +185,10 @@
       "name": "Ticket: 加 Comment（不開新單）",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1552, 160]
+      "position": [
+        1552,
+        160
+      ]
     },
     {
       "parameters": {
@@ -164,7 +203,10 @@
       "name": "Ticket: 開新單",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1552, 448]
+      "position": [
+        1552,
+        448
+      ]
     },
     {
       "parameters": {
@@ -174,7 +216,10 @@
       "name": "準備 Qdrant Point",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1776, 448]
+      "position": [
+        1776,
+        448
+      ]
     },
     {
       "parameters": {
@@ -189,7 +234,10 @@
       "name": "Qdrant: 存入向量",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2000, 448]
+      "position": [
+        2000,
+        448
+      ]
     },
     {
       "parameters": {
@@ -204,7 +252,10 @@
       "name": "推送通知",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2224, 448]
+      "position": [
+        2224,
+        448
+      ]
     },
     {
       "parameters": {
@@ -214,7 +265,10 @@
       "name": "結果：新 Ticket",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2448, 448]
+      "position": [
+        2448,
+        448
+      ]
     },
     {
       "parameters": {
@@ -224,108 +278,171 @@
       "name": "結果：重複（Comment）",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1776, 160]
+      "position": [
+        1776,
+        160
+      ]
     }
   ],
   "connections": {
     "Webhook": {
       "main": [
         [
-          { "node": "組合告警文字", "type": "main", "index": 0 }
+          {
+            "node": "組合告警文字",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Demo Trigger": {
       "main": [
         [
-          { "node": "Demo 告警", "type": "main", "index": 0 }
+          {
+            "node": "Demo 告警",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Demo 告警": {
       "main": [
         [
-          { "node": "組合告警文字", "type": "main", "index": 0 }
+          {
+            "node": "組合告警文字",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "組合告警文字": {
       "main": [
         [
-          { "node": "Gemini: Embed 告警", "type": "main", "index": 0 }
+          {
+            "node": "Gemini: Embed 告警",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Gemini: Embed 告警": {
       "main": [
         [
-          { "node": "取出向量", "type": "main", "index": 0 }
+          {
+            "node": "取出向量",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "取出向量": {
       "main": [
         [
-          { "node": "Qdrant: 搜尋相似告警", "type": "main", "index": 0 }
+          {
+            "node": "Qdrant: 搜尋相似告警",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Qdrant: 搜尋相似告警": {
       "main": [
         [
-          { "node": "判斷是否重複", "type": "main", "index": 0 }
+          {
+            "node": "判斷是否重複",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "判斷是否重複": {
       "main": [
         [
-          { "node": "IF: 重複告警？", "type": "main", "index": 0 }
+          {
+            "node": "IF: 重複告警？",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "IF: 重複告警？": {
       "main": [
         [
-          { "node": "Ticket: 加 Comment（不開新單）", "type": "main", "index": 0 }
+          {
+            "node": "Ticket: 加 Comment（不開新單）",
+            "type": "main",
+            "index": 0
+          }
         ],
         [
-          { "node": "Ticket: 開新單", "type": "main", "index": 0 }
+          {
+            "node": "Ticket: 開新單",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Ticket: 加 Comment（不開新單）": {
       "main": [
         [
-          { "node": "結果：重複（Comment）", "type": "main", "index": 0 }
+          {
+            "node": "結果：重複（Comment）",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Ticket: 開新單": {
       "main": [
         [
-          { "node": "準備 Qdrant Point", "type": "main", "index": 0 }
+          {
+            "node": "準備 Qdrant Point",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "準備 Qdrant Point": {
       "main": [
         [
-          { "node": "Qdrant: 存入向量", "type": "main", "index": 0 }
+          {
+            "node": "Qdrant: 存入向量",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Qdrant: 存入向量": {
       "main": [
         [
-          { "node": "推送通知", "type": "main", "index": 0 }
+          {
+            "node": "推送通知",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "推送通知": {
       "main": [
         [
-          { "node": "結果：新 Ticket", "type": "main", "index": 0 }
+          {
+            "node": "結果：新 Ticket",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     }
@@ -333,5 +450,36 @@
   "settings": {
     "saveManualExecutions": true,
     "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "7cd628a4-e166-46b0-b8ac-d54ff6b7f0e0",
+  "activeVersionId": "7cd628a4-e166-46b0-b8ac-d54ff6b7f0e0",
+  "versionCounter": 7,
+  "triggerCount": 1,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-08-09T05:08:23.384Z",
+      "createdAt": "2026-08-09T05:08:23.384Z",
+      "role": "workflow:owner",
+      "workflowId": "8zryoiAZB4rjeYx9",
+      "projectId": "iFSWiDfw3HA0bpAB",
+      "project": {
+        "updatedAt": "2026-08-09T04:15:47.208Z",
+        "createdAt": "2026-08-09T04:14:06.896Z",
+        "id": "iFSWiDfw3HA0bpAB",
+        "name": "Tygrus Course <tygrus@example.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "899ae217-0da7-485b-843b-c540e0928eb8"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
   }
 }

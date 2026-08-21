@@ -1,0 +1,319 @@
+{
+ "name": "Demo 14 - 告警風暴精確去重 [Data Table 狀態記憶]",
+ "nodes": [
+  {
+   "id": "n1",
+   "name": "Webhook",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2,
+   "position": [
+    0,
+    0
+   ],
+   "parameters": {
+    "httpMethod": "POST",
+    "path": "alert-dedup",
+    "responseMode": "responseNode",
+    "options": {}
+   }
+  },
+  {
+   "id": "n2",
+   "name": "Code: 組告警指紋",
+   "type": "n8n-nodes-base.code",
+   "typeVersion": 2,
+   "position": [
+    220,
+    0
+   ],
+   "parameters": {
+    "jsCode": "// 同一台主機 + 同一種告警 = 同一個指紋\nconst b = $input.item.json.body || $input.item.json;\nreturn [{ json: {\n  alert_key: `${b.host}|${b.alertname}`,\n  host: b.host,\n  alertname: b.alertname,\n  severity: b.severity || 'warning',\n  message: b.message || '',\n  now: new Date().toISOString(),\n} }];"
+   }
+  },
+  {
+   "id": "n3",
+   "name": "Data Table: 查上次出現",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1,
+   "position": [
+    440,
+    0
+   ],
+   "alwaysOutputData": true,
+   "parameters": {
+    "resource": "row",
+    "operation": "get",
+    "dataTableId": {
+     "__rl": true,
+     "value": "ugxG71SPRX07tKKV",
+     "mode": "id",
+     "cachedResultName": "alert_dedup"
+    },
+    "matchType": "anyCondition",
+    "filters": {
+     "conditions": [
+      {
+       "keyName": "alert_key",
+       "condition": "eq",
+       "keyValue": "={{ $json.alert_key }}"
+      }
+     ]
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "n4",
+   "name": "IF: 10 分鐘內重複？",
+   "type": "n8n-nodes-base.if",
+   "typeVersion": 2,
+   "position": [
+    660,
+    0
+   ],
+   "parameters": {
+    "conditions": {
+     "options": {
+      "caseSensitive": true,
+      "leftValue": "",
+      "typeValidation": "loose"
+     },
+     "conditions": [
+      {
+       "leftValue": "={{ $json.id !== undefined && (Date.now() - new Date($json.last_seen).getTime()) < 10 * 60 * 1000 }}",
+       "rightValue": "true",
+       "operator": {
+        "type": "boolean",
+        "operation": "true",
+        "singleValue": true
+       }
+      }
+     ],
+     "combinator": "and"
+    }
+   }
+  },
+  {
+   "id": "n5",
+   "name": "Data Table: 壓抑計數 +1",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1,
+   "position": [
+    880,
+    -120
+   ],
+   "parameters": {
+    "resource": "row",
+    "operation": "upsert",
+    "dataTableId": {
+     "__rl": true,
+     "value": "ugxG71SPRX07tKKV",
+     "mode": "id",
+     "cachedResultName": "alert_dedup"
+    },
+    "matchType": "anyCondition",
+    "filters": {
+     "conditions": [
+      {
+       "keyName": "alert_key",
+       "condition": "eq",
+       "keyValue": "={{ $json.alert_key }}"
+      }
+     ]
+    },
+    "columns": {
+     "mappingMode": "defineBelow",
+     "value": {
+      "alert_key": "={{ $json.alert_key }}",
+      "last_seen": "={{ $json.last_seen }}",
+      "count": "={{ $json.count + 1 }}"
+     },
+     "matchingColumns": [],
+     "schema": [],
+     "attemptToConvertTypes": false,
+     "convertFieldsToString": false
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "n6",
+   "name": "Respond: 已壓抑",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1,
+   "position": [
+    1100,
+    -120
+   ],
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ status: \"suppressed\", alert_key: $json.alert_key, duplicate_count: $json.count, note: \"10 分鐘內同一告警只通知一次\" }) }}"
+   }
+  },
+  {
+   "id": "n7",
+   "name": "Data Table: 記錄新窗口",
+   "type": "n8n-nodes-base.dataTable",
+   "typeVersion": 1,
+   "position": [
+    880,
+    120
+   ],
+   "parameters": {
+    "resource": "row",
+    "operation": "upsert",
+    "dataTableId": {
+     "__rl": true,
+     "value": "ugxG71SPRX07tKKV",
+     "mode": "id",
+     "cachedResultName": "alert_dedup"
+    },
+    "matchType": "anyCondition",
+    "filters": {
+     "conditions": [
+      {
+       "keyName": "alert_key",
+       "condition": "eq",
+       "keyValue": "={{ $('Code: 組告警指紋').item.json.alert_key }}"
+      }
+     ]
+    },
+    "columns": {
+     "mappingMode": "defineBelow",
+     "value": {
+      "alert_key": "={{ $('Code: 組告警指紋').item.json.alert_key }}",
+      "last_seen": "={{ $('Code: 組告警指紋').item.json.now }}",
+      "count": 1
+     },
+     "matchingColumns": [],
+     "schema": [],
+     "attemptToConvertTypes": false,
+     "convertFieldsToString": false
+    },
+    "options": {}
+   }
+  },
+  {
+   "id": "n8",
+   "name": "HTTP: 送出通知",
+   "type": "n8n-nodes-base.httpRequest",
+   "typeVersion": 4.2,
+   "position": [
+    1100,
+    120
+   ],
+   "parameters": {
+    "method": "POST",
+    "url": "http://host.containers.internal:3001/api/notify",
+    "sendBody": true,
+    "specifyBody": "json",
+    "jsonBody": "={{ JSON.stringify({ channel: \"ops\", message: `[${$('Code: 組告警指紋').item.json.severity}] ${$('Code: 組告警指紋').item.json.alert_key} 首次/新窗口告警，已通知值班`, }) }}",
+    "options": {}
+   }
+  },
+  {
+   "id": "n9",
+   "name": "Respond: 已通知",
+   "type": "n8n-nodes-base.respondToWebhook",
+   "typeVersion": 1,
+   "position": [
+    1320,
+    120
+   ],
+   "parameters": {
+    "respondWith": "json",
+    "responseBody": "={{ JSON.stringify({ status: \"notified\", alert_key: $('Code: 組告警指紋').item.json.alert_key }) }}"
+   }
+  }
+ ],
+ "connections": {
+  "Webhook": {
+   "main": [
+    [
+     {
+      "node": "Code: 組告警指紋",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Code: 組告警指紋": {
+   "main": [
+    [
+     {
+      "node": "Data Table: 查上次出現",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Data Table: 查上次出現": {
+   "main": [
+    [
+     {
+      "node": "IF: 10 分鐘內重複？",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "IF: 10 分鐘內重複？": {
+   "main": [
+    [
+     {
+      "node": "Data Table: 壓抑計數 +1",
+      "type": "main",
+      "index": 0
+     }
+    ],
+    [
+     {
+      "node": "Data Table: 記錄新窗口",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Data Table: 壓抑計數 +1": {
+   "main": [
+    [
+     {
+      "node": "Respond: 已壓抑",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "Data Table: 記錄新窗口": {
+   "main": [
+    [
+     {
+      "node": "HTTP: 送出通知",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  },
+  "HTTP: 送出通知": {
+   "main": [
+    [
+     {
+      "node": "Respond: 已通知",
+      "type": "main",
+      "index": 0
+     }
+    ]
+   ]
+  }
+ },
+ "settings": {
+  "executionOrder": "v1"
+ },
+ "active": false
+}

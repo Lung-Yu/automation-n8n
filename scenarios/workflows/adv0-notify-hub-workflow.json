@@ -1,5 +1,11 @@
 {
+  "updatedAt": "2026-08-20T18:16:28.000Z",
+  "createdAt": "2026-08-09T05:08:23.381Z",
+  "id": "o2HjFFLd9SLowlPF",
   "name": "Adv 0 - 通知中心 [共用 Sub-Workflow：severity 分流 → Discord / Email]",
+  "description": null,
+  "active": true,
+  "isArchived": false,
   "nodes": [
     {
       "parameters": {
@@ -11,11 +17,14 @@
       "name": "Sticky Note",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [-64, -208]
+      "position": [
+        -64,
+        -208
+      ]
     },
     {
       "parameters": {
-        "content": "### Discord Webhook 設定\n\n1. Discord 伺服器 → 頻道設定 → 整合 → Webhook → 新增\n2. 複製 Webhook URL，替換本 workflow 兩個 HTTP 節點的 URL\n\n### Email（選用）\n\n「Email: 緊急信件」節點預設 disabled。\n啟用步驟：Settings → Credentials → 新增 SMTP\n（Gmail 需用應用程式密碼），然後 enable 該節點。",
+        "content": "### 通知出口設定（2026-08-21 改版）\n\n- **critical** → 真實 Jira 開單（Jira Basic Auth，同 Lab A）\n- **非 critical** → mock-api `POST /api/notify`（`GET /api/notify` 可查收到的通知）\n\n原 Discord/Email 版本需自行填 Webhook URL / SMTP，課堂改用上述兩出口。",
         "height": 260,
         "width": 380
       },
@@ -23,7 +32,10 @@
       "name": "Sticky Note 2",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [1104, -160]
+      "position": [
+        1104,
+        -160
+      ]
     },
     {
       "parameters": {
@@ -36,7 +48,10 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [-16, 304],
+      "position": [
+        -16,
+        304
+      ],
       "webhookId": "adv0-notify-hub-hook"
     },
     {
@@ -45,7 +60,10 @@
       "name": "Demo Trigger",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [-16, 512]
+      "position": [
+        -16,
+        512
+      ]
     },
     {
       "parameters": {
@@ -55,7 +73,10 @@
       "name": "Demo 通知",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [176, 512]
+      "position": [
+        176,
+        512
+      ]
     },
     {
       "parameters": {
@@ -65,7 +86,10 @@
       "name": "整理通知",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [400, 304]
+      "position": [
+        400,
+        304
+      ]
     },
     {
       "parameters": {
@@ -95,121 +119,160 @@
       "name": "IF: critical？",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [624, 304]
+      "position": [
+        624,
+        304
+      ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN",
+        "url": "https://tygrus.atlassian.net/rest/api/2/issue",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { content: '🚨 @here **[' + $json.source + '] ' + $json.title + '**\\n' + $json.message } }}",
-        "options": {}
+        "jsonBody": "={{ JSON.stringify({ fields: { project: { key: \"SCRUM\" }, summary: \"[緊急] \" + $('整理通知').item.json.title, description: \"來源：\" + $('整理通知').item.json.source + \"\\n\\n\" + $('整理通知').item.json.message + \"\\n\\n（由 Adv 0 通知中心自動開單）\", issuetype: { name: \"任務\" }, priority: { name: \"Highest\" } } }) }}",
+        "options": {
+          "headers": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
       },
       "id": "adv0-discord-crit",
-      "name": "Discord: 緊急通知",
+      "name": "Jira: 緊急開單",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [848, 160]
+      "position": [
+        848,
+        160
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "mCxSPjcqfWCPiF4C",
+          "name": "Jira Basic Auth (tygrus.atlassian.net)"
+        }
+      }
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN",
+        "url": "http://host.containers.internal:3001/api/notify",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { content: 'ℹ️ **[' + $json.source + '] ' + $json.title + '**\\n' + $json.message } }}",
+        "jsonBody": "={{ JSON.stringify($('整理通知').item.json) }}",
         "options": {}
       },
       "id": "adv0-discord-info",
-      "name": "Discord: 一般訊息",
+      "name": "Mock 通知 (/api/notify)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [848, 448]
+      "position": [
+        848,
+        448
+      ]
     },
     {
       "parameters": {
-        "fromEmail": "n8n-ops@example.com",
-        "toEmail": "oncall-team@example.com",
-        "subject": "=[緊急] {{ $('整理通知').item.json.title }}",
-        "text": "={{ $('整理通知').item.json.message }}",
-        "options": {}
-      },
-      "id": "adv0-email",
-      "name": "Email: 緊急信件",
-      "type": "n8n-nodes-base.emailSend",
-      "typeVersion": 2.1,
-      "position": [1104, 160],
-      "disabled": true
-    },
-    {
-      "parameters": {
-        "jsCode": "const n = $('整理通知').item.json;\nreturn [{ json: {\n  notified: true,\n  channel: 'discord',\n  urgency: n.severity === 'critical' ? 'urgent' : 'normal',\n  source: n.source,\n  title: n.title\n} }];"
+        "jsCode": "const n = $('整理通知').item.json;\nreturn [{ json: {\n  notified: true,\n  channel: n.severity === 'critical' ? 'jira' : 'mock-notify',\n  urgency: n.severity === 'critical' ? 'urgent' : 'normal',\n  source: n.source,\n  title: n.title\n} }];"
       },
       "id": "adv0-result",
       "name": "回報結果",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1104, 448]
+      "position": [
+        1104,
+        448
+      ]
     }
   ],
   "connections": {
     "Webhook": {
       "main": [
         [
-          { "node": "整理通知", "type": "main", "index": 0 }
+          {
+            "node": "整理通知",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Demo Trigger": {
       "main": [
         [
-          { "node": "Demo 通知", "type": "main", "index": 0 }
+          {
+            "node": "Demo 通知",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Demo 通知": {
       "main": [
         [
-          { "node": "整理通知", "type": "main", "index": 0 }
+          {
+            "node": "整理通知",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "整理通知": {
       "main": [
         [
-          { "node": "IF: critical？", "type": "main", "index": 0 }
+          {
+            "node": "IF: critical？",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "IF: critical？": {
       "main": [
         [
-          { "node": "Discord: 緊急通知", "type": "main", "index": 0 }
+          {
+            "node": "Jira: 緊急開單",
+            "type": "main",
+            "index": 0
+          }
         ],
         [
-          { "node": "Discord: 一般訊息", "type": "main", "index": 0 }
+          {
+            "node": "Mock 通知 (/api/notify)",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
-    "Discord: 緊急通知": {
+    "Jira: 緊急開單": {
       "main": [
         [
-          { "node": "Email: 緊急信件", "type": "main", "index": 0 }
+          {
+            "node": "回報結果",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
-    "Email: 緊急信件": {
+    "Mock 通知 (/api/notify)": {
       "main": [
         [
-          { "node": "回報結果", "type": "main", "index": 0 }
-        ]
-      ]
-    },
-    "Discord: 一般訊息": {
-      "main": [
-        [
-          { "node": "回報結果", "type": "main", "index": 0 }
+          {
+            "node": "回報結果",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     }
@@ -217,5 +280,36 @@
   "settings": {
     "saveManualExecutions": true,
     "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "8fc8018d-3e32-41d4-81b4-c519f470e7d0",
+  "activeVersionId": "8fc8018d-3e32-41d4-81b4-c519f470e7d0",
+  "versionCounter": 13,
+  "triggerCount": 1,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-08-09T05:08:23.382Z",
+      "createdAt": "2026-08-09T05:08:23.382Z",
+      "role": "workflow:owner",
+      "workflowId": "o2HjFFLd9SLowlPF",
+      "projectId": "iFSWiDfw3HA0bpAB",
+      "project": {
+        "updatedAt": "2026-08-09T04:15:47.208Z",
+        "createdAt": "2026-08-09T04:14:06.896Z",
+        "id": "iFSWiDfw3HA0bpAB",
+        "name": "Tygrus Course <tygrus@example.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "899ae217-0da7-485b-843b-c540e0928eb8"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
   }
 }

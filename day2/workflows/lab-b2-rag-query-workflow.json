@@ -1,5 +1,11 @@
 {
+  "updatedAt": "2026-08-20T18:07:02.000Z",
+  "createdAt": "2026-08-09T05:08:23.408Z",
+  "id": "8Gng5nbIgYlMxrYT",
   "name": "Lab B2 - Hybrid RAG Query",
+  "description": null,
+  "active": true,
+  "isArchived": false,
   "nodes": [
     {
       "parameters": {
@@ -34,7 +40,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=YOUR_GEMINI_API_KEY",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=AQ.Ab8RN6JscuXFa5La2HCYbgE1jpE8w8kCRQ6YjbAaZ69f7pcUeA",
         "sendBody": true,
         "specifyBody": "json",
         "options": {
@@ -158,10 +164,9 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=YOUR_GEMINI_API_KEY",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AQ.Ab8RN6JscuXFa5La2HCYbgE1jpE8w8kCRQ6YjbAaZ69f7pcUeA",
         "sendBody": true,
-        "specifyBody": "string",
-        "body": "={{ $json.gemini_payload }}",
+        "specifyBody": "json",
         "options": {
           "headers": {
             "parameters": [
@@ -180,7 +185,8 @@
               "value": "application/json"
             }
           ]
-        }
+        },
+        "jsonBody": "={{ JSON.parse($json.gemini_payload) }}"
       },
       "id": "node-generate",
       "name": "Gemini Generate",
@@ -397,5 +403,35 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "staticData": null
+  "staticData": null,
+  "meta": null,
+  "pinData": null,
+  "versionId": "5149a935-c485-417b-93b7-4cc62b1a0e47",
+  "activeVersionId": "5149a935-c485-417b-93b7-4cc62b1a0e47",
+  "versionCounter": 8,
+  "triggerCount": 1,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-08-09T05:08:23.409Z",
+      "createdAt": "2026-08-09T05:08:23.409Z",
+      "role": "workflow:owner",
+      "workflowId": "8Gng5nbIgYlMxrYT",
+      "projectId": "iFSWiDfw3HA0bpAB",
+      "project": {
+        "updatedAt": "2026-08-09T04:15:47.208Z",
+        "createdAt": "2026-08-09T04:14:06.896Z",
+        "id": "iFSWiDfw3HA0bpAB",
+        "name": "Tygrus Course <tygrus@example.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "899ae217-0da7-485b-843b-c540e0928eb8"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
 }
